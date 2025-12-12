@@ -1,0 +1,170 @@
+'use client';
+
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useDisconnect } from 'wagmi';
+import { User, LogOut, ChevronDown, Wallet } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+
+export default function CustomConnectButton() {
+  const { disconnect } = useDisconnect();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [dropdownRef]);
+
+  return (
+    <ConnectButton.Custom>
+      {({
+        account,
+        chain,
+        openAccountModal,
+        openChainModal,
+        openConnectModal,
+        authenticationStatus,
+        mounted,
+      }) => {
+        const ready = mounted && authenticationStatus !== 'loading';
+        const connected =
+          ready &&
+          account &&
+          chain &&
+          (!authenticationStatus ||
+            authenticationStatus === 'authenticated');
+
+        return (
+          <div
+            {...(!ready && {
+              'aria-hidden': true,
+              'style': {
+                opacity: 0,
+                pointerEvents: 'none',
+                userSelect: 'none',
+              },
+            })}
+          >
+            {(() => {
+              if (!connected) {
+                return (
+                  <button
+                    onClick={openConnectModal}
+                    className="bg-white text-black font-bold px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Connect Wallet
+                  </button>
+                );
+              }
+
+              if (chain.unsupported) {
+                return (
+                  <button
+                    onClick={openChainModal}
+                    className="bg-red-500 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                  >
+                    Wrong network
+                  </button>
+                );
+              }
+
+              return (
+                <div className="flex items-center gap-4">
+                  {/* Network Pill */}
+                  <button
+                    onClick={openChainModal}
+                    className="hidden md:flex items-center gap-2 h-10 bg-secondary/30 border border-muted text-gray-400 px-3 rounded hover:text-white hover:border-gray-500 transition-colors text-xs font-bold tracking-wider"
+                  >
+                    {chain.hasIcon && (
+                      <div
+                        style={{
+                          background: chain.iconBackground,
+                          width: 16,
+                          height: 16,
+                          borderRadius: 999,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {chain.iconUrl && (
+                          <img
+                            alt={chain.name ?? 'Chain icon'}
+                            src={chain.iconUrl}
+                            style={{ width: 16, height: 16 }}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {chain.name}
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+
+                  {/* Balance Display */}
+                  <div className="hidden md:flex items-center gap-3 h-10 px-4 rounded border border-primary/30 bg-primary/5 text-white font-mono text-sm font-bold shadow-[0_0_10px_rgba(59,130,246,0.1)]">
+                     <div className="bg-primary p-0.5 rounded-[2px]">
+                       <Wallet className="w-3 h-3 text-black" />
+                     </div>
+                     {account.displayBalance ? account.displayBalance : '0 MNT'}
+                  </div>
+
+                  {/* Account Dropdown */}
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      onClick={() => setIsOpen(!isOpen)}
+                      className="relative w-10 h-10 rounded border border-muted bg-secondary/50 hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden group"
+                    >
+                      <div className="w-full h-full bg-gradient-to-b from-gray-800 to-black flex items-center justify-center group-hover:from-gray-700 group-hover:to-gray-900 transition-colors">
+                         <User className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
+                      </div>
+                      
+                      {/* Green Status Dot */}
+                      <div className="absolute bottom-1 right-1 w-2 h-2 bg-green-500 rounded-full shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></div>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isOpen && (
+                      <div className="absolute right-0 mt-2 w-48 bg-black/90 backdrop-blur-md border border-gray-800 rounded shadow-2xl overflow-hidden z-50">
+                        <div className="px-4 py-3 border-b border-gray-800">
+                          <p className="text-[10px] text-gray-500 uppercase tracking-wider">Connected As</p>
+                          <p className="text-sm font-bold text-white truncate">{account.displayName}</p>
+                        </div>
+                        <Link 
+                          href="/profile" 
+                          className="flex items-center gap-2 px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                          onClick={() => setIsOpen(false)}
+                        >
+                          <User className="w-4 h-4" />
+                          My Profile
+                        </Link>
+                        <button
+                          onClick={() => {
+                            disconnect();
+                            setIsOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-500/10 transition-colors text-left"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Disconnect
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        );
+      }}
+    </ConnectButton.Custom>
+  );
+}

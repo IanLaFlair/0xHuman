@@ -1,8 +1,8 @@
 # Table of Contents
 
-* [WELCOME](README.md)
+* [WELCOME_](README.md)
 
-* [GAMEPLAY MECHANICS](gameplay/README.md)
+* [GAMEPLAY_MECHANICS](gameplay/README.md)
     * [Betting Tiers](gameplay/betting-tiers.md)
 
 * [ECONOMY](economy/README.md)

@@ -1,16 +1,12 @@
 # Table of Contents
 
-* [Introduction](README.md)
+* [WELCOME](README.md)
 
-* [Getting Started](getting-started/README.md)
-    * [Installation](getting-started/installation.md)
-    * [Connecting Wallet](getting-started/connecting-wallet.md)
+* [GAMEPLAY MECHANICS](gameplay/README.md)
+    * [Betting Tiers](gameplay/betting-tiers.md)
 
-* [Game Mechanics](mechanics/README.md)
-    * [The Arena](mechanics/arena.md)
-    * [Game Terminal](mechanics/terminal.md)
-    * [Leaderboard](mechanics/leaderboard.md)
+* [ECONOMY](economy/README.md)
 
-* [Architecture](architecture/README.md)
-    * [Tech Stack](architecture/tech-stack.md)
-    * [Project Structure](architecture/structure.md)
+* [ROADMAP](roadmap/README.md)
+
+* [FAQ](faq/README.md)

@@ -1,20 +1,15 @@
-# Introduction
+# INITIALIZING 0XHUMAN...
 
-Welcome to the **0xHuman** documentation.
+> "Spot the Bot. Fake the Soul. Take the Pot."
 
-0xHuman is a cyberpunk-themed Web3 competitive gaming platform where players engage in high-stakes arena battles using their unique digital identities.
+Welcome to **0xHuman**, the first high-stakes Social Deduction game built on Mantle Network.
 
-## Key Features
+## The Concept
 
-*   **Cyberpunk Aesthetic**: Immersive UI with glitch effects, neon visuals, and terminal-style interactions.
-*   **Web3 Integration**: Seamless wallet connection using RainbowKit and Wagmi.
-*   **Competitive Arena**: Battle against other players in real-time or turn-based mechanics.
-*   **Leaderboard**: Track your ranking and earn rewards.
-*   **Profile Management**: Customize your 0xHuman identity.
+In a world flooded with AI, can you trust who you are talking to? We turn the classic Turing Test into a competitive betting arena. You are matched in a blind chat room for 60 seconds and must wager money on one simple question:
 
-## Navigation
+**"Is my opponent a Human or a Machine?"**
 
-Use the sidebar to navigate through the documentation:
-*   **Getting Started**: How to set up and run the project.
-*   **Mechanics**: Detailed explanation of game systems.
-*   **Architecture**: Technical overview for developers.
+## The Twist
+
+Humans are allowed (and encouraged) to mimic AI behavior. If you can fool another human into thinking you are a bot, you steal their liquidity.

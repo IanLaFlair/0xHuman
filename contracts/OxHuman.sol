@@ -1,32 +1,124 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+
 contract OxHuman {
+    enum GameStatus { Open, Active, Resolved }
+    enum Role { Human, Bot }
+
     struct Game {
         address player1;
         address player2;
         uint256 stake;
-        bool isPlayer2Bot;
+        GameStatus status;
+        address winner;
         uint256 timestamp;
+        bool isPlayer2Bot; // In a real version, this might be hidden/hashed
+        bool player1GuessedBot; // True if P1 guessed P2 is a bot
+        bool player1Submitted;
     }
 
     mapping(uint256 => Game) public games;
     uint256 public gameCount;
+    address public oracle; // The Game Master who verifies functionality
 
-    event GameStarted(uint256 indexed gameId, address player1, uint256 stake);
+    event GameCreated(uint256 indexed gameId, address player1, uint256 stake);
+    event GameJoined(uint256 indexed gameId, address player2);
+    event GameResolved(uint256 indexed gameId, address winner, uint256 payout);
+
+    modifier onlyOracle() {
+        require(msg.sender == oracle, "Only Oracle");
+        _;
+    }
+
+    constructor() {
+        oracle = msg.sender;
+    }
 
     function createGame() external payable {
         require(msg.value > 0, "Stake required");
         
         games[gameCount] = Game({
             player1: msg.sender,
-            player2: address(0), // To be filled
+            player2: address(0),
             stake: msg.value,
-            isPlayer2Bot: false, // Logic to determine this
-            timestamp: block.timestamp
+            status: GameStatus.Open,
+            winner: address(0),
+            timestamp: block.timestamp,
+            isPlayer2Bot: false, // Default, set by join or oracle
+            player1GuessedBot: false,
+            player1Submitted: false
         });
 
-        emit GameStarted(gameCount, msg.sender, msg.value);
+        emit GameCreated(gameCount, msg.sender, msg.value);
         gameCount++;
+    }
+
+    // For PvP or when the Oracle assigns a bot
+    function joinGame(uint256 _gameId, bool _isBot) external payable {
+        Game storage game = games[_gameId];
+        require(game.status == GameStatus.Open, "Game not open");
+        require(msg.value == game.stake, "Incorrect stake");
+        require(msg.sender != game.player1, "Cannot play against self");
+
+        game.player2 = msg.sender;
+        game.isPlayer2Bot = _isBot; // In PvP, this would be false. For Bot, Oracle calls this.
+        game.status = GameStatus.Active;
+
+        emit GameJoined(_gameId, msg.sender);
+    }
+
+    // Player 1 submits their verdict
+    function submitVerdict(uint256 _gameId, bool _guessedBot) external {
+        Game storage game = games[_gameId];
+        require(game.status == GameStatus.Active, "Game not active");
+        require(msg.sender == game.player1, "Only Player 1 can guess");
+        require(!game.player1Submitted, "Already submitted");
+
+        game.player1GuessedBot = _guessedBot;
+        game.player1Submitted = true;
+        
+        // In this simplified version, we resolve immediately if P2 is known
+        // In a real version with hidden roles, we'd wait for reveal
+        _resolveGame(_gameId);
+    }
+
+    function _resolveGame(uint256 _gameId) internal {
+        Game storage game = games[_gameId];
+        
+        bool correctGuess = (game.player1GuessedBot == game.isPlayer2Bot);
+        uint256 totalPot = game.stake * 2;
+        uint256 fee = totalPot * 5 / 100; // 5% fee
+        uint256 payout = totalPot - fee;
+
+        if (correctGuess) {
+            // Player 1 wins
+            game.winner = game.player1;
+            payable(game.player1).transfer(payout);
+        } else {
+            // Player 2 (or Bot/House) wins
+            game.winner = game.player2;
+            payable(game.player2).transfer(payout);
+        }
+
+        // Collect fee (send to oracle for now)
+        payable(oracle).transfer(fee);
+
+        game.status = GameStatus.Resolved;
+        emit GameResolved(_gameId, game.winner, payout);
+    }
+
+    // Oracle can force resolve or join as bot
+    function oracleJoinAsBot(uint256 _gameId) external payable onlyOracle {
+        Game storage game = games[_gameId];
+        require(game.status == GameStatus.Open, "Game not open");
+        // Oracle matches stake to play as bot
+        require(msg.value == game.stake, "Incorrect stake");
+
+        game.player2 = msg.sender; // Oracle address acts as the bot wallet
+        game.isPlayer2Bot = true;
+        game.status = GameStatus.Active;
+
+        emit GameJoined(_gameId, msg.sender);
     }
 }

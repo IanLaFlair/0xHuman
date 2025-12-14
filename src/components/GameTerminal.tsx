@@ -13,11 +13,12 @@ type Message = {
 
 type GameState = 'searching' | 'connected' | 'playing' | 'voting' | 'finished';
 
-export default function GameTerminal({ arenaId }: { arenaId: string }) {
+export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string, stakeAmount: string }) {
   const [gameState, setGameState] = useState<GameState>('searching');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [timeLeft, setTimeLeft] = useState(60);
+  const [votingTimeLeft, setVotingTimeLeft] = useState(15);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -34,7 +35,7 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
     }
   }, [gameState]);
 
-  // Timer
+  // Game Timer
   useEffect(() => {
     if (gameState === 'playing' && timeLeft > 0) {
       const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
@@ -44,20 +45,31 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
     }
   }, [gameState, timeLeft]);
 
+  // Voting Timer
+  useEffect(() => {
+    if (gameState === 'voting' && votingTimeLeft > 0) {
+      const timer = setInterval(() => setVotingTimeLeft((t) => t - 1), 1000);
+      return () => clearInterval(timer);
+    } else if (votingTimeLeft === 0 && gameState === 'voting') {
+      // Auto-resolve if time runs out (mock)
+      setGameState('finished');
+    }
+  }, [gameState, votingTimeLeft]);
+
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const addSystemMessage = (text: string) => {
-    setMessages((prev) => [...prev, { id: Date.now(), sender: 'system', text, timestamp: Date.now() }]);
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'system', text, timestamp: Date.now() }]);
   };
 
   const sendMessage = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputText.trim()) return;
 
-    const newMessage: Message = { id: Date.now(), sender: 'me', text: inputText, timestamp: Date.now() };
+    const newMessage: Message = { id: Date.now() + Math.random(), sender: 'me', text: inputText, timestamp: Date.now() };
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
 
@@ -71,7 +83,7 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
         "Greetings. I am ready to begin the interaction."
       ];
       const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      setMessages((prev) => [...prev, { id: Date.now(), sender: 'opponent', text: randomReply, timestamp: Date.now() }]);
+      setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'opponent', text: randomReply, timestamp: Date.now() }]);
     }, 1000 + Math.random() * 2000);
   };
 
@@ -149,6 +161,93 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
     );
   }
 
+  // --- VOTING VIEW ---
+  if (gameState === 'voting') {
+    return (
+      <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+        
+        <div className="max-w-5xl w-full z-10 space-y-8">
+           <div className="text-center space-y-4">
+             <div className="inline-block bg-red-900/20 border border-red-500/50 text-red-500 px-4 py-1 rounded-full text-xs tracking-widest animate-pulse">
+               ● VERDICT REQUIRED
+             </div>
+             <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tighter">CAST YOUR VERDICT</h1>
+             
+             <div className="flex justify-center items-center gap-4 font-mono">
+               <div className="bg-secondary border border-muted p-4 rounded-lg text-center min-w-[100px]">
+                 <div className="text-4xl font-bold text-white">{votingTimeLeft < 10 ? `0${votingTimeLeft}` : votingTimeLeft}</div>
+                 <div className="text-[10px] text-gray-500 uppercase">Seconds</div>
+               </div>
+             </div>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             {/* Vote Bot */}
+             <button 
+               onClick={() => handleVote('bot')}
+               className="group relative bg-black border border-red-900/30 rounded-xl overflow-hidden hover:border-red-500 transition-all text-left h-96 outline-none ring-0 caret-transparent select-none"
+             >
+               {/* Background Image */}
+               <div className="absolute inset-0">
+                 <img 
+                   src="/assets/bot_verdict_card.png" 
+                   alt="Bot Verdict" 
+                   className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all duration-500 scale-100 group-hover:scale-105"
+                 />
+                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+               </div>
+
+               <div className="relative z-10 h-full flex flex-col justify-end p-8">
+                 <Bot className="w-12 h-12 text-red-500 mb-4" />
+                 <h2 className="text-4xl font-bold text-white mb-2">BOT</h2>
+                 <p className="text-red-400 text-sm font-bold mb-4 tracking-widest">SYNTHETIC SIGNATURE</p>
+                 <p className="text-gray-300 text-sm leading-relaxed mb-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-4 group-hover:translate-y-0">
+                   Opponent displayed unnatural response times and perfect syntax. Deceiver Detected.
+                 </p>
+                 <div className="w-full bg-red-600 text-white font-bold py-4 rounded text-center group-hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">
+                   VOTE BOT
+                 </div>
+               </div>
+             </button>
+
+             {/* Vote Human */}
+             <button 
+               onClick={() => handleVote('human')}
+               className="group relative bg-black border border-green-900/30 rounded-xl overflow-hidden hover:border-green-500 transition-all text-left h-96 outline-none ring-0 caret-transparent select-none"
+             >
+               {/* Background Image */}
+               <div className="absolute inset-0">
+                 <img 
+                   src="/assets/human_verdict_card.png" 
+                   alt="Human Verdict" 
+                   className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-all duration-500 scale-100 group-hover:scale-105"
+                 />
+                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+               </div>
+
+               <div className="relative z-10 h-full flex flex-col justify-end p-8">
+                 <User className="w-12 h-12 text-green-500 mb-4" />
+                 <h2 className="text-4xl font-bold text-white mb-2">HUMAN</h2>
+                 <p className="text-green-400 text-sm font-bold mb-4 tracking-widest">VERIFIED SOUL</p>
+                 <p className="text-gray-300 text-sm leading-relaxed mb-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-4 group-hover:translate-y-0">
+                   Opponent showed emotional inconsistency and typos. Likely organic behavior.
+                 </p>
+                 <div className="w-full bg-green-600 text-white font-bold py-4 rounded text-center group-hover:bg-green-500 transition-colors shadow-lg shadow-green-900/20">
+                   VOTE HUMAN
+                 </div>
+               </div>
+             </button>
+           </div>
+
+           <div className="text-center text-gray-500 text-xs max-w-lg mx-auto">
+             <span className="text-primary font-bold">WARNING:</span> Once cast, your verdict is final and the staked amount is locked until resolution.
+           </div>
+        </div>
+      </div>
+    );
+  }
+
   // --- RESULT VIEW ---
   if (gameState === 'finished') {
     return (
@@ -202,11 +301,11 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
                <div className="grid grid-cols-2 gap-4">
                  <div className="bg-secondary/50 border border-muted p-6 rounded-lg">
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
-                   <div className="text-2xl font-bold text-white">50 MNT</div>
+                   <div className="text-2xl font-bold text-white">{stakeAmount} MNT</div>
                  </div>
                  <div className="bg-red-900/10 border border-red-900/50 p-6 rounded-lg">
                    <div className="text-red-500 text-xs uppercase tracking-widest mb-2">Settlement</div>
-                   <div className="text-2xl font-bold text-red-500">-50 MNT <span className="text-xs opacity-70">-100%</span></div>
+                   <div className="text-2xl font-bold text-red-500">-{stakeAmount} MNT <span className="text-xs opacity-70">-100%</span></div>
                  </div>
                </div>
                
@@ -364,11 +463,11 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
            <div className="space-y-6">
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">STAKE AMOUNT</span>
-               <span className="text-sm font-bold text-primary">50 MNT</span>
+               <span className="text-sm font-bold text-primary">{stakeAmount} MNT</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">WIN POTENTIAL</span>
-               <span className="text-sm font-bold text-accent-green">95 MNT</span>
+               <span className="text-sm font-bold text-accent-green">{(parseFloat(stakeAmount) * 1.9).toFixed(1)} MNT</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">LATENCY</span>
@@ -383,21 +482,7 @@ export default function GameTerminal({ arenaId }: { arenaId: string }) {
            </div>
 
            <div className="mt-auto">
-             <div className="text-center text-xs text-gray-500 mb-4">[ FINAL VERDICT REQUIRED ]</div>
-             <div className="space-y-3">
-               <button 
-                 onClick={() => handleVote('human')}
-                 className="w-full bg-accent-green/10 border border-accent-green text-accent-green py-3 rounded hover:bg-accent-green hover:text-black transition-all font-bold flex items-center justify-center gap-2 group"
-               >
-                 <User className="w-4 h-4" /> ACCUSE HUMAN <span className="text-[10px] opacity-50 group-hover:text-black ml-auto">PRESS H</span>
-               </button>
-               <button 
-                 onClick={() => handleVote('bot')}
-                 className="w-full bg-secondary border border-muted text-gray-400 py-3 rounded hover:border-primary hover:text-white transition-all font-bold flex items-center justify-center gap-2 group"
-               >
-                 <Bot className="w-4 h-4" /> ACCUSE AI BOT <span className="text-[10px] opacity-50 ml-auto">PRESS B</span>
-               </button>
-             </div>
+             <div className="text-center text-xs text-gray-500 mb-4 animate-pulse">[ AWAITING TIMER COMPLETION ]</div>
            </div>
         </div>
       </div>

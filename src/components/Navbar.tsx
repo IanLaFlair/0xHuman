@@ -31,17 +31,18 @@ export default function Navbar() {
         <Link href="/leaderboard" className={`${isActive('/leaderboard')} transition-colors pb-0.5`}>
           // LEADERBOARD
         </Link>
-        <Link href="#" className="text-gray-500 hover:text-gray-300 transition-colors pb-0.5">
+        <Link href="/docs" className={`${isActive('/docs')} transition-colors pb-0.5`}>
           // DOCS
         </Link>
         
-        <div className="hidden md:flex items-center gap-2 text-accent-green ml-4">
+
+      </div>
+      
+      <div className="hidden md:flex items-center gap-6">
+        <div className="flex items-center gap-2 text-accent-green text-xs md:text-sm">
           <div className="w-2 h-2 bg-accent-green rounded-full animate-pulse" />
           SYSTEM: ONLINE
         </div>
-      </div>
-      
-      <div className="hidden md:block">
         <CustomConnectButton />
       </div>
     </nav>

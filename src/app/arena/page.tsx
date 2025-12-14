@@ -6,33 +6,29 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2, Users, Zap, Trophy, Shield, Terminal, ArrowRight, Swords } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import { useCreateGame } from '@/hooks/useOxHuman';
 
 export default function ArenaPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
+  
+  const { createGame, isPending, isConfirming, isConfirmed } = useCreateGame();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return null;
-
-  if (!isConnected) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-4 text-center bg-background text-foreground font-mono">
-        <div className="border border-red-500/50 bg-red-500/10 p-8 rounded-lg max-w-md w-full">
-          <Shield className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-2 text-red-500">ACCESS DENIED</h1>
-          <p className="text-gray-400 mb-6">Secure connection required. Please connect your wallet to access the arena.</p>
-          <div className="flex justify-center">
-            <ConnectButton />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (isConfirmed) {
+      // In a real app, we'd parse the logs to get the Game ID
+      // For now, we'll redirect to a demo game page with the selected stake
+      const arena = arenas.find(a => a.id === selectedArena);
+      const stake = arena ? arena.stake : '2';
+      router.push(`/game/1?stake=${stake}`); 
+    }
+  }, [isConfirmed, router, selectedArena]);
 
   const arenas = [
     {
@@ -68,6 +64,31 @@ export default function ArenaPage() {
     }
   ];
 
+  const handleInitialize = () => {
+    if (!selectedArena) return;
+    const arena = arenas.find(a => a.id === selectedArena);
+    if (arena) {
+      createGame(arena.stake);
+    }
+  };
+
+  if (!mounted) return null;
+
+  if (!isConnected) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 text-center bg-background text-foreground font-mono">
+        <div className="border border-red-500/50 bg-red-500/10 p-8 rounded-lg max-w-md w-full">
+          <Shield className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold mb-2 text-red-500">ACCESS DENIED</h1>
+          <p className="text-gray-400 mb-6">Secure connection required. Please connect your wallet to access the arena.</p>
+          <div className="flex justify-center">
+            <ConnectButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background p-4 md:p-8 font-mono relative overflow-hidden flex flex-col">
       {/* Background Grid */}
@@ -76,7 +97,7 @@ export default function ArenaPage() {
       {/* Header */}
       <Navbar />
 
-      <div className="max-w-6xl mx-auto w-full z-10 flex-1 flex flex-col justify-center">
+      <div className="max-w-6xl mx-auto w-full z-10 flex-1 flex-col justify-center flex">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-primary mb-2">
              <div className="w-2 h-2 bg-primary rounded-sm" />
@@ -168,16 +189,20 @@ export default function ArenaPage() {
              </div>
              
              <button
-               disabled={!selectedArena}
-               onClick={() => selectedArena && router.push(`/game/${selectedArena}`)}
+               disabled={!selectedArena || isPending || isConfirming}
+               onClick={handleInitialize}
                className={`w-full max-w-md py-4 rounded font-bold text-lg tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg ${
-                 selectedArena 
+                 selectedArena && !isPending && !isConfirming
                    ? 'bg-primary text-black hover:bg-blue-400 shadow-primary/20' 
                    : 'bg-gray-800 text-gray-500 cursor-not-allowed'
                }`}
              >
-               <Zap className="w-5 h-5 fill-current" />
-               INITIALIZE LINK [ENTER ARENA]
+               {isPending || isConfirming ? (
+                 <Loader2 className="w-5 h-5 animate-spin" />
+               ) : (
+                 <Zap className="w-5 h-5 fill-current" />
+               )}
+               {isPending ? 'CONFIRMING...' : isConfirming ? 'INITIALIZING...' : 'INITIALIZE LINK [ENTER ARENA]'}
              </button>
              
              <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-2">Gas fees apply // Mantle Network</p>

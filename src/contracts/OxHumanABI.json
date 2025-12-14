@@ -1,0 +1,217 @@
+[
+    {
+        "inputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "gameId",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "player1",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "stake",
+                "type": "uint256"
+            }
+        ],
+        "name": "GameCreated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "gameId",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "player2",
+                "type": "address"
+            }
+        ],
+        "name": "GameJoined",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "gameId",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "winner",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "payout",
+                "type": "uint256"
+            }
+        ],
+        "name": "GameResolved",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "createGame",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "gameCount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "name": "games",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "player1",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "player2",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stake",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum OxHuman.GameStatus",
+                "name": "status",
+                "type": "uint8"
+            },
+            {
+                "internalType": "address",
+                "name": "winner",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bool",
+                "name": "isPlayer2Bot",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "player1GuessedBot",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "player1Submitted",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_gameId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bool",
+                "name": "_isBot",
+                "type": "bool"
+            }
+        ],
+        "name": "joinGame",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "oracle",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_gameId",
+                "type": "uint256"
+            }
+        ],
+        "name": "oracleJoinAsBot",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_gameId",
+                "type": "uint256"
+            },
+            {
+                "internalType": "bool",
+                "name": "_guessedBot",
+                "type": "bool"
+            }
+        ],
+        "name": "submitVerdict",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]

@@ -1,0 +1,21 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "lib": [
+            "esnext"
+        ]
+    },
+    "include": [
+        "hardhat.config.ts",
+        "contracts/**/*.sol",
+        "scripts/**/*.ts",
+        "test/**/*.ts"
+    ],
+    "ts-node": {
+        "esm": true
+    }
+}

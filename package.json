@@ -2,6 +2,7 @@
   "name": "oxhuman",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,12 +11,16 @@
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query": "^5.90.12",
     "clsx": "^2.1.1",
+    "gray-matter": "^4.0.3",
     "lucide-react": "^0.559.0",
     "next": "16.0.8",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.4.0",
     "viem": "^2.41.2",
@@ -30,7 +35,7 @@
     "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
-    "hardhat": "^3.1.0",
+    "hardhat": "^2.22.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

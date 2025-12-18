@@ -118,7 +118,7 @@ export default function CustomConnectButton() {
                   </div>
 
                   {/* Account Dropdown */}
-                  <div className="relative" ref={dropdownRef}>
+                  <div className="relative hidden md:block" ref={dropdownRef}>
                     <button
                       onClick={() => setIsOpen(!isOpen)}
                       className="relative w-10 h-10 rounded border border-muted bg-secondary/50 hover:border-primary/50 transition-colors flex items-center justify-center overflow-hidden group"

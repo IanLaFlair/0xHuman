@@ -83,62 +83,66 @@ export default function LeaderboardPage() {
 
         {/* Leaderboard Table */}
         <div className="border border-muted rounded-lg overflow-hidden bg-secondary/20 backdrop-blur-sm mb-8">
-          {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 p-4 border-b border-muted text-[10px] text-gray-500 uppercase tracking-wider font-bold">
-            <div className="col-span-1">Rank</div>
-            <div className="col-span-5 md:col-span-4">Human Identity</div>
-            <div className="col-span-2 text-right hidden md:block">Total Wins</div>
-            <div className="col-span-3 md:col-span-2 text-center">Win Rate</div>
-            <div className="col-span-3 text-right text-primary">MNT Earned</div>
-          </div>
-
-          {/* Table Body */}
-          <div className="divide-y divide-muted/30">
-            {leaderboardData.map((user) => (
-              <div key={user.rank} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/5 transition-colors group">
-                <div className="col-span-1 font-bold text-lg flex items-center gap-2">
-                  {user.rank <= 3 && <Trophy className={`w-4 h-4 ${
-                    user.rank === 1 ? 'text-yellow-500' : 
-                    user.rank === 2 ? 'text-gray-400' : 'text-amber-700'
-                  }`} />}
-                  <span className={user.rank <= 3 ? 'text-white' : 'text-gray-500'}>
-                    {user.rank.toString().padStart(2, '0')}
-                  </span>
-                </div>
-                
-                <div className="col-span-5 md:col-span-4 flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded flex items-center justify-center ${
-                    user.rank === 1 ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' : 'bg-gray-800 text-gray-400 border border-gray-700'
-                  }`}>
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-white group-hover:text-primary transition-colors">{user.identity}</div>
-                    {user.level && <div className="text-[10px] text-gray-500">{user.level}</div>}
-                  </div>
-                </div>
-
-                <div className="col-span-2 text-right text-gray-300 font-medium hidden md:block">
-                  {user.wins}
-                </div>
-
-                <div className="col-span-3 md:col-span-2 flex justify-center">
-                  <div className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 ${
-                    user.winRate >= 80 ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 
-                    user.winRate >= 70 ? 'bg-blue-500/10 text-blue-500 border border-blue-500/30' :
-                    'bg-gray-800 text-gray-400'
-                  }`}>
-                    {user.winRate}%
-                    <ArrowUpRight className="w-3 h-3" />
-                  </div>
-                </div>
-
-                <div className="col-span-3 text-right font-bold text-primary flex items-center justify-end gap-2">
-                  {user.earned}
-                  <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[600px]">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 gap-4 p-4 border-b border-muted text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                <div className="col-span-1">Rank</div>
+                <div className="col-span-5 md:col-span-4">Human Identity</div>
+                <div className="col-span-2 text-right hidden md:block">Total Wins</div>
+                <div className="col-span-3 md:col-span-2 text-center">Win Rate</div>
+                <div className="col-span-3 text-right text-primary">MNT Earned</div>
               </div>
-            ))}
+
+              {/* Table Body */}
+              <div className="divide-y divide-muted/30">
+                {leaderboardData.map((user) => (
+                  <div key={user.rank} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white/5 transition-colors group">
+                    <div className="col-span-1 font-bold text-lg flex items-center gap-2">
+                      {user.rank <= 3 && <Trophy className={`w-4 h-4 ${
+                        user.rank === 1 ? 'text-yellow-500' : 
+                        user.rank === 2 ? 'text-gray-400' : 'text-amber-700'
+                      }`} />}
+                      <span className={user.rank <= 3 ? 'text-white' : 'text-gray-500'}>
+                        {user.rank.toString().padStart(2, '0')}
+                      </span>
+                    </div>
+                    
+                    <div className="col-span-5 md:col-span-4 flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded flex items-center justify-center ${
+                        user.rank === 1 ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' : 'bg-gray-800 text-gray-400 border border-gray-700'
+                      }`}>
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white group-hover:text-primary transition-colors">{user.identity}</div>
+                        {user.level && <div className="text-[10px] text-gray-500">{user.level}</div>}
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 text-right text-gray-300 font-medium hidden md:block">
+                      {user.wins}
+                    </div>
+
+                    <div className="col-span-3 md:col-span-2 flex justify-center">
+                      <div className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 ${
+                        user.winRate >= 80 ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 
+                        user.winRate >= 70 ? 'bg-blue-500/10 text-blue-500 border border-blue-500/30' :
+                        'bg-gray-800 text-gray-400'
+                      }`}>
+                        {user.winRate}%
+                        <ArrowUpRight className="w-3 h-3" />
+                      </div>
+                    </div>
+
+                    <div className="col-span-3 text-right font-bold text-primary flex items-center justify-end gap-2">
+                      {user.earned}
+                      <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -151,7 +155,7 @@ export default function LeaderboardPage() {
 
       {/* Bottom Bar */}
       <div className="border-t border-primary/30 bg-black/50 backdrop-blur-md p-4">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-primary/20 rounded border border-primary/50 flex items-center justify-center">
               <User className="w-5 h-5 text-primary" />

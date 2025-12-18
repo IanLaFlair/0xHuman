@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon } from 'lucide-react';
+import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
+import { useGameStatus, useJoinGame, useSubmitVerdict } from '@/hooks/useOxHuman';
+import { formatEther } from 'viem';
 
 type Message = {
   id: number;
@@ -14,6 +17,11 @@ type Message = {
 type GameState = 'searching' | 'connected' | 'playing' | 'voting' | 'finished';
 
 export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string, stakeAmount: string }) {
+  const { address } = useAccount();
+  const { data: gameData, isLoading: isLoadingGame } = useGameStatus(parseInt(arenaId));
+  const { joinGame, isPending: isJoining, isConfirmed: isJoined } = useJoinGame();
+  const { submitVerdict, isPending: isVoting, isConfirmed: isVoted } = useSubmitVerdict();
+  
   const [gameState, setGameState] = useState<GameState>('searching');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -22,44 +30,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Mock Game Loop
-  useEffect(() => {
-    if (gameState === 'searching') {
-      setTimeout(() => {
-        setGameState('connected');
-        addSystemMessage('UPLINK ESTABLISHED. IDENTIFY THE ENTITY.');
-        setTimeout(() => {
-          setGameState('playing');
-        }, 2000);
-      }, 5000);
-    }
-  }, [gameState]);
+  // ... (useEffect for game sync)
 
-  // Game Timer
-  useEffect(() => {
-    if (gameState === 'playing' && timeLeft > 0) {
-      const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-      return () => clearInterval(timer);
-    } else if (timeLeft === 0 && gameState === 'playing') {
-      setGameState('voting');
-    }
-  }, [gameState, timeLeft]);
+  // ... (useEffect for timers)
 
-  // Voting Timer
-  useEffect(() => {
-    if (gameState === 'voting' && votingTimeLeft > 0) {
-      const timer = setInterval(() => setVotingTimeLeft((t) => t - 1), 1000);
-      return () => clearInterval(timer);
-    } else if (votingTimeLeft === 0 && gameState === 'voting') {
-      // Auto-resolve if time runs out (mock)
-      setGameState('finished');
-    }
-  }, [gameState, votingTimeLeft]);
-
-  // Auto-scroll
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // ... (useEffect for scroll)
 
   const addSystemMessage = (text: string) => {
     setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'system', text, timestamp: Date.now() }]);
@@ -88,11 +63,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   };
 
   const handleVote = (vote: 'human' | 'bot') => {
-    setGameState('finished');
+    submitVerdict(parseInt(arenaId), vote === 'bot');
   };
 
   // --- MATCHMAKING VIEW ---
   if (gameState === 'searching') {
+    const isCreator = gameData && (gameData as any)[0] === address;
+
     return (
       <div className="w-full h-screen bg-background relative overflow-hidden flex flex-col font-mono">
         {/* Map Background Placeholder */}
@@ -103,7 +80,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         <div className="p-6 border-b border-muted/30 flex justify-between items-center z-10 bg-background/80 backdrop-blur">
            <div className="flex items-center gap-2 text-primary">
              <Wifi className="w-5 h-5 animate-pulse" />
-             <span className="font-bold tracking-widest">STATUS: INITIALIZING MATCHMAKING</span>
+             <span className="font-bold tracking-widest">STATUS: {isCreator ? 'INITIALIZING MATCHMAKING' : 'OPPONENT FOUND'}</span>
            </div>
            <div className="border border-primary/30 px-3 py-1 rounded text-primary text-xs">
              0x83...F41
@@ -131,8 +108,25 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
             <div className="md:col-span-2 border border-muted bg-secondary/30 rounded-lg p-1 relative flex items-center justify-center overflow-hidden">
                <div className="absolute inset-0 bg-grid-pattern opacity-20" />
                <div className="relative z-10 text-center">
-                 <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tighter">SEARCHING FOR OPPONENT</h1>
-                 <p className="text-gray-400 text-lg animate-pulse">&gt; Searching for a soul... or a circuit?_</p>
+                 {isCreator ? (
+                   <>
+                     <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tighter">SEARCHING FOR OPPONENT</h1>
+                     <p className="text-gray-400 text-lg animate-pulse">&gt; Searching for a soul... or a circuit?_</p>
+                   </>
+                 ) : (
+                   <>
+                     <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tighter">OPPONENT DETECTED</h1>
+                     <p className="text-gray-400 text-lg mb-8">&gt; Protocol Open. Initialize Link?</p>
+                     <button 
+                       onClick={() => joinGame(parseInt(arenaId), stakeAmount)}
+                       disabled={isJoining || isJoined}
+                       className="bg-primary text-black font-bold py-4 px-12 rounded text-xl hover:bg-blue-400 transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)] flex items-center gap-2 mx-auto"
+                     >
+                       <Swords className="w-6 h-6" />
+                       {isJoining ? 'ESTABLISHING LINK...' : 'JOIN GAME'}
+                     </button>
+                   </>
+                 )}
                </div>
                
                {/* Radar Circles */}

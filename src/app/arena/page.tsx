@@ -14,21 +14,33 @@ export default function ArenaPage() {
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
   
-  const { createGame, isPending, isConfirming, isConfirmed } = useCreateGame();
+  const { createGame, isPending, isConfirming, isConfirmed, receipt } = useCreateGame();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (isConfirmed) {
-      // In a real app, we'd parse the logs to get the Game ID
-      // For now, we'll redirect to a demo game page with the selected stake
-      const arena = arenas.find(a => a.id === selectedArena);
-      const stake = arena ? arena.stake : '2';
-      router.push(`/game/1?stake=${stake}`); 
+    if (isConfirmed && receipt) {
+      // Parse logs to find GameCreated event
+      // Event signature: GameCreated(uint256,address,uint256)
+      // Topic 0: 0x85713221cb2a4177979673d12227d6d1b953d395780516b32039943232a93364 (Keccak-256 of signature)
+      // But simpler: just look for the log from our contract that has 2 topics (id, player1) or check address
+      
+      // We can iterate through logs to find the one with the correct structure
+      // For now, assuming it's the last log or finding by topic length is a safe heuristic for this simple contract
+      const log = receipt.logs.find(l => l.topics.length >= 2); 
+      
+      if (log) {
+        const gameIdHex = log.topics[1];
+        const gameId = parseInt(gameIdHex as string, 16);
+        
+        const arena = arenas.find(a => a.id === selectedArena);
+        const stake = arena ? arena.stake : '2';
+        router.push(`/game/${gameId}?stake=${stake}`);
+      }
     }
-  }, [isConfirmed, router, selectedArena]);
+  }, [isConfirmed, receipt, router, selectedArena]);
 
   const arenas = [
     {
@@ -211,12 +223,13 @@ export default function ArenaPage() {
       </div>
       
       {/* Footer Info */}
-      <div className="mt-12 border-t border-muted/30 pt-6 flex justify-between text-[10px] text-gray-600 uppercase tracking-widest z-10">
-        <div className="flex items-center gap-2">
+      {/* Footer Info */}
+      <div className="mt-12 border-t border-muted/30 pt-6 flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-600 uppercase tracking-widest z-10 text-center md:text-left">
+        <div className="flex items-center justify-center md:justify-start gap-2">
           <Terminal className="w-3 h-3" />
           0xHuman Protocol
         </div>
-        <div className="flex gap-6">
+        <div className="flex justify-center gap-6">
           <span>Terms of Service</span>
           <span>Privacy Policy</span>
           <span>Smart Contract</span>

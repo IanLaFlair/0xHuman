@@ -8,7 +8,7 @@ const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string
 export function useCreateGame() {
     const { writeContract, data: hash, isPending, error } = useWriteContract();
 
-    const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    const { isLoading: isConfirming, isSuccess: isConfirmed, data } =
         useWaitForTransactionReceipt({
             hash,
         });
@@ -28,7 +28,8 @@ export function useCreateGame() {
         isConfirming,
         isConfirmed,
         error,
-        hash
+        hash,
+        receipt: isConfirmed ? data : null // Expose the receipt
     };
 }
 
@@ -69,4 +70,31 @@ export function useGameStatus(gameId: number) {
     });
 
     return { data, isError, isLoading };
+}
+
+export function useSubmitVerdict() {
+    const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+    const { isLoading: isConfirming, isSuccess: isConfirmed } =
+        useWaitForTransactionReceipt({
+            hash,
+        });
+
+    const submitVerdict = async (gameId: number, guessedBot: boolean) => {
+        writeContract({
+            address: CONTRACT_ADDRESS,
+            abi: OxHumanABI,
+            functionName: 'submitVerdict',
+            args: [BigInt(gameId), guessedBot],
+        });
+    };
+
+    return {
+        submitVerdict,
+        isPending,
+        isConfirming,
+        isConfirmed,
+        error,
+        hash
+    };
 }

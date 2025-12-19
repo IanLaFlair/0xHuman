@@ -27,14 +27,85 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [inputText, setInputText] = useState('');
   const [timeLeft, setTimeLeft] = useState(60);
   const [votingTimeLeft, setVotingTimeLeft] = useState(15);
+  const [realStake, setRealStake] = useState<string>(stakeAmount);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // ... (useEffect for game sync)
+  // Sync Game State
+  useEffect(() => {
+    if (!gameData) return;
 
-  // ... (useEffect for timers)
+    // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, ...]
+    const status = Number((gameData as any)[3]);
+    const player2 = (gameData as any)[1];
+    
+    // 0=Waiting, 1=Active, 2=Finished
+    if (status === 1) {
+      if (gameState !== 'playing' && gameState !== 'voting' && gameState !== 'finished') {
+        setGameState('playing');
+        addSystemMessage("OPPONENT CONNECTED. SESSION START.");
+      }
+      
+      // Update Stake from Contract
+      const stakeWei = (gameData as any)[2];
+      if (stakeWei) {
+        setRealStake(formatEther(stakeWei));
+      }
 
-  // ... (useEffect for scroll)
+      // Sync Timer with Blockchain Timestamp
+      const startTime = Number((gameData as any)[5]);
+      const now = Math.floor(Date.now() / 1000);
+      const elapsed = now - startTime;
+      const remaining = Math.max(0, 60 - elapsed);
+      setTimeLeft(remaining);
+
+    } else if (status === 2) {
+       setGameState('finished');
+    }
+  }, [gameData, gameState]);
+
+  // Timers
+  useEffect(() => {
+    if (gameState === 'playing') {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setGameState('voting');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    } else if (gameState === 'voting') {
+      const timer = setInterval(() => {
+        setVotingTimeLeft((prev) => {
+          if (prev <= 1) return 0;
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [gameState]);
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Interactive Progress Bar
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (gameState === 'searching') {
+      const interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 100) return 0;
+          return prev + 1;
+        });
+      }, 50);
+      return () => clearInterval(interval);
+    }
+  }, [gameState]);
 
   const addSystemMessage = (text: string) => {
     setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'system', text, timestamp: Date.now() }]);
@@ -114,18 +185,16 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                      <p className="text-gray-400 text-lg animate-pulse">&gt; Searching for a soul... or a circuit?_</p>
                    </>
                  ) : (
-                   <>
-                     <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tighter">OPPONENT DETECTED</h1>
-                     <p className="text-gray-400 text-lg mb-8">&gt; Protocol Open. Initialize Link?</p>
-                     <button 
-                       onClick={() => joinGame(parseInt(arenaId), stakeAmount)}
-                       disabled={isJoining || isJoined}
-                       className="bg-primary text-black font-bold py-4 px-12 rounded text-xl hover:bg-blue-400 transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)] flex items-center gap-2 mx-auto"
-                     >
-                       <Swords className="w-6 h-6" />
-                       {isJoining ? 'ESTABLISHING LINK...' : 'JOIN GAME'}
-                     </button>
-                   </>
+                    <>
+                      <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tighter">CONNECTING...</h1>
+                      <p className="text-gray-400 text-lg mb-8 animate-pulse">&gt; Establishing secure uplink to Node...</p>
+                      <div className="flex flex-col items-center gap-2">
+                         <div className="w-64 h-2 bg-gray-800 rounded-full overflow-hidden">
+                           <div className="h-full bg-primary animate-progress" style={{ width: '100%' }}></div>
+                         </div>
+                         <span className="text-xs text-primary tracking-widest">HANDSHAKE IN PROGRESS</span>
+                      </div>
+                    </>
                  )}
                </div>
                
@@ -140,10 +209,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         <div className="p-8 z-10">
           <div className="flex justify-between text-xs text-primary mb-2 uppercase tracking-widest">
             <span>Establishing Handshake...</span>
-            <span>45%</span>
+            <span>{progress}%</span>
           </div>
           <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary w-[45%] animate-pulse shadow-[0_0_10px_var(--primary)]" />
+            <div 
+              className="h-full bg-primary shadow-[0_0_10px_var(--primary)] transition-all duration-75 ease-linear" 
+              style={{ width: `${progress}%` }}
+            />
           </div>
           <div className="flex justify-between text-[10px] text-gray-600 mt-2 uppercase tracking-widest">
             <span>Node: US-EAST-1</span>
@@ -295,11 +367,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                <div className="grid grid-cols-2 gap-4">
                  <div className="bg-secondary/50 border border-muted p-6 rounded-lg">
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
-                   <div className="text-2xl font-bold text-white">{stakeAmount} MNT</div>
+                   <div className="text-2xl font-bold text-white">{realStake} MNT</div>
                  </div>
                  <div className="bg-red-900/10 border border-red-900/50 p-6 rounded-lg">
                    <div className="text-red-500 text-xs uppercase tracking-widest mb-2">Settlement</div>
-                   <div className="text-2xl font-bold text-red-500">-{stakeAmount} MNT <span className="text-xs opacity-70">-100%</span></div>
+                   <div className="text-2xl font-bold text-red-500">-{realStake} MNT <span className="text-xs opacity-70">-100%</span></div>
                  </div>
                </div>
                
@@ -457,11 +529,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
            <div className="space-y-6">
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">STAKE AMOUNT</span>
-               <span className="text-sm font-bold text-primary">{stakeAmount} MNT</span>
+               <span className="text-sm font-bold text-primary">{realStake} MNT</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">WIN POTENTIAL</span>
-               <span className="text-sm font-bold text-accent-green">{(parseFloat(stakeAmount) * 1.9).toFixed(1)} MNT</span>
+               <span className="text-sm font-bold text-accent-green">{(parseFloat(realStake) * 1.9).toFixed(1)} MNT</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">LATENCY</span>

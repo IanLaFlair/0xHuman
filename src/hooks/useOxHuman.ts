@@ -1,17 +1,14 @@
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount } from 'wagmi';
+import OxHumanABI from '../contracts/OxHumanABI.json';
 import { parseEther } from 'viem';
-import OxHumanABI from '@/contracts/OxHumanABI.json';
 
-// Replace with actual deployed address
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || '0x0000000000000000000000000000000000000000';
 
+// Hook for creating a game
 export function useCreateGame() {
     const { writeContract, data: hash, isPending, error } = useWriteContract();
-
-    const { isLoading: isConfirming, isSuccess: isConfirmed, data } =
-        useWaitForTransactionReceipt({
-            hash,
-        });
+    const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
+        useWaitForTransactionReceipt({ hash });
 
     const createGame = async (stakeAmount: string) => {
         writeContract({
@@ -22,63 +19,34 @@ export function useCreateGame() {
         });
     };
 
-    return {
-        createGame,
-        isPending,
-        isConfirming,
-        isConfirmed,
-        error,
-        hash,
-        receipt: isConfirmed ? data : null // Expose the receipt
-    };
+    return { createGame, isPending, isConfirming, isConfirmed, hash, receipt, error };
 }
 
+// Hook for joining a game
 export function useJoinGame() {
     const { writeContract, data: hash, isPending, error } = useWriteContract();
-
-    const { isLoading: isConfirming, isSuccess: isConfirmed } =
-        useWaitForTransactionReceipt({
-            hash,
-        });
+    const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
+        useWaitForTransactionReceipt({ hash });
 
     const joinGame = async (gameId: number, stakeAmount: string) => {
+        // Note: isBot param is hardcoded to false for now as this is for human players
         writeContract({
             address: CONTRACT_ADDRESS,
             abi: OxHumanABI,
             functionName: 'joinGame',
-            args: [BigInt(gameId), false], // Default to human for PvP join
+            args: [BigInt(gameId), false],
             value: parseEther(stakeAmount),
         });
     };
 
-    return {
-        joinGame,
-        isPending,
-        isConfirming,
-        isConfirmed,
-        error,
-        hash
-    };
+    return { joinGame, isPending, isConfirming, isConfirmed, hash, receipt, error };
 }
 
-export function useGameStatus(gameId: number) {
-    const { data, isError, isLoading } = useReadContract({
-        address: CONTRACT_ADDRESS,
-        abi: OxHumanABI,
-        functionName: 'games',
-        args: [BigInt(gameId)],
-    });
-
-    return { data, isError, isLoading };
-}
-
+// Hook for submitting a verdict
 export function useSubmitVerdict() {
     const { writeContract, data: hash, isPending, error } = useWriteContract();
-
-    const { isLoading: isConfirming, isSuccess: isConfirmed } =
-        useWaitForTransactionReceipt({
-            hash,
-        });
+    const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
+        useWaitForTransactionReceipt({ hash });
 
     const submitVerdict = async (gameId: number, guessedBot: boolean) => {
         writeContract({
@@ -89,12 +57,98 @@ export function useSubmitVerdict() {
         });
     };
 
+    return { submitVerdict, isPending, isConfirming, isConfirmed, hash, receipt, error };
+}
+
+// Hook for reading game status
+export function useGameStatus(gameId: number) {
+    const { data, isLoading, error, refetch } = useReadContract({
+        address: CONTRACT_ADDRESS,
+        abi: OxHumanABI,
+        functionName: 'games',
+        args: [BigInt(gameId)],
+        query: {
+            refetchInterval: 1000, // Poll every 1 second
+        },
+    });
+
+    return { data, isLoading, error, refetch };
+}
+
+// Hook for reading game count
+export function useGameCount() {
+    const { data, isLoading, error } = useReadContract({
+        address: CONTRACT_ADDRESS,
+        abi: OxHumanABI,
+        functionName: 'gameCount',
+    });
+
+    return { data, isLoading, error };
+}
+
+// Hook for finding a match
+export function useFindMatch() {
+    const publicClient = usePublicClient();
+    const { address } = useAccount();
+
+    const findMatch = async (stakeAmount: string): Promise<number | null> => {
+        if (!publicClient) return null;
+
+        try {
+            // Get total game count
+            const count = await publicClient.readContract({
+                address: CONTRACT_ADDRESS,
+                abi: OxHumanABI,
+                functionName: 'gameCount',
+            }) as bigint;
+
+            const totalGames = Number(count);
+            const stakeWei = parseEther(stakeAmount);
+
+            // Search backwards from the latest game (limit to last 10 for performance)
+            const limit = Math.max(0, totalGames - 10);
+
+            for (let i = totalGames - 1; i >= limit; i--) {
+                const game = await publicClient.readContract({
+                    address: CONTRACT_ADDRESS,
+                    abi: OxHumanABI,
+                    functionName: 'games',
+                    args: [BigInt(i)],
+                }) as any;
+
+                // Check if game is WAITING (status 0), has correct stake, and I am not the creator
+                // game structure: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, ...]
+                // status 0 = Waiting
+                if (game[3] === 0 && game[2] === stakeWei && game[0] !== address) {
+                    return i; // Found a match!
+                }
+            }
+        } catch (error) {
+            console.error("Error finding match:", error);
+        }
+
+        return null; // No match found
+    };
+
+    return { findMatch };
+}
+
+// Default export for backward compatibility
+export function useOxHuman() {
+    const create = useCreateGame();
+    const join = useJoinGame();
+    const verdict = useSubmitVerdict();
+    const count = useGameCount();
+
     return {
-        submitVerdict,
-        isPending,
-        isConfirming,
-        isConfirmed,
-        error,
-        hash
+        createGame: create.createGame,
+        joinGame: join.joinGame,
+        submitVerdict: verdict.submitVerdict,
+        gameCount: count.data,
+        isPending: create.isPending,
+        isConfirming: create.isConfirming,
+        isConfirmed: create.isConfirmed,
+        hash: create.hash,
+        error: create.error,
     };
 }

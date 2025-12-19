@@ -6,41 +6,80 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2, Users, Zap, Trophy, Shield, Terminal, ArrowRight, Swords } from 'lucide-react';
 import Navbar from '@/components/Navbar';
-import { useCreateGame } from '@/hooks/useOxHuman';
+import { useCreateGame, useJoinGame, useFindMatch } from '@/hooks/useOxHuman';
+import { decodeEventLog } from 'viem';
+import OxHumanABI from '@/contracts/OxHumanABI.json';
 
 export default function ArenaPage() {
   const { isConnected } = useAccount();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
+  const [targetGameId, setTargetGameId] = useState<number | null>(null);
   
-  const { createGame, isPending, isConfirming, isConfirmed, receipt } = useCreateGame();
+  const { createGame, isPending: isCreating, isConfirming: isConfirmingCreate, isConfirmed: isCreated, hash: createHash, receipt: createReceipt } = useCreateGame();
+  const { joinGame, isPending: isJoining, isConfirming: isConfirmingJoin, isConfirmed: isJoined, hash: joinHash } = useJoinGame();
+  const { findMatch } = useFindMatch();
+
+
+  // Combine loading states
+  const isPending = isCreating || isJoining;
+  const isConfirming = isConfirmingCreate || isConfirmingJoin;
+  const isConfirmed = isCreated || isJoined;
+  const hash = createHash || joinHash;
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (isConfirmed && receipt) {
-      // Parse logs to find GameCreated event
-      // Event signature: GameCreated(uint256,address,uint256)
-      // Topic 0: 0x85713221cb2a4177979673d12227d6d1b953d395780516b32039943232a93364 (Keccak-256 of signature)
-      // But simpler: just look for the log from our contract that has 2 topics (id, player1) or check address
+    if (isConfirmed && hash) {
+      // If we have a targetGameId (from joining), use it
+      if (targetGameId !== null) {
+        router.push(`/game/${targetGameId}`);
+        return;
+      }
+
+      // If we created a game, we need to find the GameId from logs
+      // For now, if we don't have it, we can try to fetch the latest game or just redirect to a default
+      // But since we are in a "Dice Roll" flow, if we created a game, it's likely the latest one.
+      // A safer bet for now without parsing logs is to redirect to /game/latest or handle it better.
+      // However, for this fix, let's assume if we joined, we have ID. If created, we might need to wait or check logs.
       
-      // We can iterate through logs to find the one with the correct structure
-      // For now, assuming it's the last log or finding by topic length is a safe heuristic for this simple contract
-      const log = receipt.logs.find(l => l.topics.length >= 2); 
-      
-      if (log) {
-        const gameIdHex = log.topics[1];
-        const gameId = parseInt(gameIdHex as string, 16);
-        
-        const arena = arenas.find(a => a.id === selectedArena);
-        const stake = arena ? arena.stake : '2';
-        router.push(`/game/${gameId}?stake=${stake}`);
+      // Attempt to parse logs if available
+      if (createReceipt) {
+         let newGameId = null;
+         try {
+           for (const log of createReceipt.logs) {
+             try {
+               const event = decodeEventLog({
+                 abi: OxHumanABI,
+                 data: log.data,
+                 topics: log.topics,
+               });
+               if (event.eventName === 'GameCreated') {
+                 newGameId = (event.args as any).gameId;
+                 break;
+               }
+             } catch (e) {
+               // Ignore logs that don't match ABI
+             }
+           }
+         } catch (err) {
+           console.error("Error parsing logs:", err);
+         }
+
+         const targetId = newGameId ? Number(newGameId) : 1;
+         const stake = selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '50';
+         
+         console.log("Game Created! Redirecting to:", targetId);
+         router.push(`/game/${targetId}?stake=${stake}`); 
+      } else if (targetGameId) {
+         const stake = selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '50';
+         router.push(`/game/${targetGameId}?stake=${stake}`);
       }
     }
-  }, [isConfirmed, receipt, router, selectedArena]);
+  }, [isConfirmed, hash, router, targetGameId, createReceipt]);
 
   const arenas = [
     {
@@ -76,10 +115,35 @@ export default function ArenaPage() {
     }
   ];
 
-  const handleInitialize = () => {
+  const handleInitialize = async () => {
     if (!selectedArena) return;
     const arena = arenas.find(a => a.id === selectedArena);
-    if (arena) {
+    if (!arena) return;
+
+    // Reset state
+    setTargetGameId(null);
+
+    // 1. Roll Dice (0-100)
+    const diceRoll = Math.floor(Math.random() * 100);
+    console.log("Dice Roll:", diceRoll);
+
+    // 2. Path A: AI Path (Dice < 50) -> Create Game directly
+    if (diceRoll < 50) {
+      console.log("Path: AI (Create Game)");
+      createGame(arena.stake);
+      return;
+    }
+
+    // 3. Path B: Human Path (Dice >= 50) -> Try to find match
+    console.log("Path: Human (Searching for match...)");
+    const foundGameId = await findMatch(arena.stake);
+
+    if (foundGameId !== null) {
+      console.log("Match Found! Joining Game ID:", foundGameId);
+      setTargetGameId(foundGameId);
+      joinGame(foundGameId, arena.stake);
+    } else {
+      console.log("No match found. Creating new game...");
       createGame(arena.stake);
     }
   };
@@ -222,7 +286,6 @@ export default function ArenaPage() {
         </div>
       </div>
       
-      {/* Footer Info */}
       {/* Footer Info */}
       <div className="mt-12 border-t border-muted/30 pt-6 flex flex-col md:flex-row justify-between gap-4 text-[10px] text-gray-600 uppercase tracking-widest z-10 text-center md:text-left">
         <div className="flex items-center justify-center md:justify-start gap-2">

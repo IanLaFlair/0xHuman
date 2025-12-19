@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bot": "npx tsx scripts/bot-agent.ts"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",

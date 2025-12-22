@@ -69,7 +69,7 @@ export default function ArenaPage() {
            console.error("Error parsing logs:", err);
          }
 
-         const targetId = newGameId ? Number(newGameId) : 1;
+         const targetId = newGameId !== null ? Number(newGameId) : 0;
          const stake = selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '50';
          
          console.log("Game Created! Redirecting to:", targetId);

@@ -86,6 +86,39 @@ export function useGameCount() {
     return { data, isLoading, error };
 }
 
+// [NEW] Hook for reading winnings balance
+export function useWinningsBalance(address: `0x${string}` | undefined) {
+    const { data, isLoading, error, refetch } = useReadContract({
+        address: CONTRACT_ADDRESS,
+        abi: OxHumanABI,
+        functionName: 'winnings',
+        args: address ? [address] : undefined,
+        query: {
+            enabled: !!address,
+            refetchInterval: 2000, // Poll every 2 seconds
+        },
+    });
+
+    return { data, isLoading, error, refetch };
+}
+
+// [NEW] Hook for claiming winnings
+export function useClaimWinnings() {
+    const { writeContract, data: hash, isPending, error } = useWriteContract();
+    const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
+        useWaitForTransactionReceipt({ hash });
+
+    const claimWinnings = async () => {
+        writeContract({
+            address: CONTRACT_ADDRESS,
+            abi: OxHumanABI,
+            functionName: 'claimWinnings',
+        });
+    };
+
+    return { claimWinnings, isPending, isConfirming, isConfirmed, hash, receipt, error };
+}
+
 // Hook for finding a match
 export function useFindMatch() {
     const publicClient = usePublicClient();

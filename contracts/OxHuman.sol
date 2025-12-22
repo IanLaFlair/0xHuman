@@ -19,12 +19,14 @@ contract OxHuman {
     }
 
     mapping(uint256 => Game) public games;
+    mapping(address => uint256) public winnings; // [NEW] Track winnings
     uint256 public gameCount;
     address public oracle; // The Game Master who verifies functionality
 
     event GameCreated(uint256 indexed gameId, address player1, uint256 stake);
     event GameJoined(uint256 indexed gameId, address player2);
     event GameResolved(uint256 indexed gameId, address winner, uint256 payout);
+    event WinningsClaimed(address indexed player, uint256 amount); // [NEW]
 
     modifier onlyOracle() {
         require(msg.sender == oracle, "Only Oracle");
@@ -94,11 +96,11 @@ contract OxHuman {
         if (correctGuess) {
             // Player 1 wins
             game.winner = game.player1;
-            payable(game.player1).transfer(payout);
+            winnings[game.player1] += payout; // [NEW] Add to winnings
         } else {
             // Player 2 (or Bot/House) wins
             game.winner = game.player2;
-            payable(game.player2).transfer(payout);
+            winnings[game.player2] += payout; // [NEW] Add to winnings
         }
 
         // Collect fee (send to oracle for now)
@@ -106,6 +108,17 @@ contract OxHuman {
 
         game.status = GameStatus.Resolved;
         emit GameResolved(_gameId, game.winner, payout);
+    }
+
+    // [NEW] Claim Winnings Function
+    function claimWinnings() external {
+        uint256 amount = winnings[msg.sender];
+        require(amount > 0, "No winnings to claim");
+
+        winnings[msg.sender] = 0;
+        payable(msg.sender).transfer(amount);
+
+        emit WinningsClaimed(msg.sender, amount);
     }
 
     // Oracle can force resolve or join as bot

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords } from 'lucide-react';
+import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
-import { useGameStatus, useJoinGame, useSubmitVerdict } from '@/hooks/useOxHuman';
+import { useGameStatus, useJoinGame, useSubmitVerdict, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
 import { formatEther } from 'viem';
+import TransactionOverlay from './TransactionOverlay';
 
 type Message = {
   id: number;
@@ -20,7 +21,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const { address } = useAccount();
   const { data: gameData, isLoading: isLoadingGame } = useGameStatus(parseInt(arenaId));
   const { joinGame, isPending: isJoining, isConfirmed: isJoined } = useJoinGame();
-  const { submitVerdict, isPending: isVoting, isConfirmed: isVoted } = useSubmitVerdict();
+  const { submitVerdict, isPending: isVotingPending, isConfirming: isVotingConfirming, isConfirmed: isVoted } = useSubmitVerdict();
+  const { claimWinnings, isPending: isClaimingPending, isConfirming: isClaimingConfirming, isConfirmed: isClaimed } = useClaimWinnings();
+  const { data: winningsBalance, refetch: refetchWinnings } = useWinningsBalance(address);
+
+  // Combined loading states for UX
+  const isVoting = isVotingPending || isVotingConfirming;
+  const isClaiming = isClaimingPending || isClaimingConfirming;
   
   const [gameState, setGameState] = useState<GameState>('searching');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,6 +37,14 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [realStake, setRealStake] = useState<string>(stakeAmount);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // Derive result info from gameData
+  // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted]
+  const isPlayer2Bot = gameData ? Boolean((gameData as any)[6]) : false;
+  const player1GuessedBot = gameData ? Boolean((gameData as any)[7]) : false;
+  const winner = gameData ? (gameData as any)[4] : null;
+  const isWinner = winner && address && winner.toLowerCase() === address.toLowerCase();
+  const isCorrectGuess = player1GuessedBot === isPlayer2Bot;
 
   // Sync Game State
   useEffect(() => {
@@ -230,7 +245,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   // --- VOTING VIEW ---
   if (gameState === 'voting') {
     return (
-      <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
+      <>
+        <TransactionOverlay 
+          isVisible={isVoting} 
+          message="SUBMITTING VERDICT" 
+          subMessage="Your prediction is being recorded on-chain..."
+        />
+        <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-10" />
         
         <div className="max-w-5xl w-full z-10 space-y-8">
@@ -252,6 +273,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
              {/* Vote Bot */}
              <button 
                onClick={() => handleVote('bot')}
+               disabled={isVoting}
                className="group relative bg-black border border-red-900/30 rounded-xl overflow-hidden hover:border-red-500 transition-all text-left h-96 outline-none ring-0 caret-transparent select-none"
              >
                {/* Background Image */}
@@ -280,6 +302,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
              {/* Vote Human */}
              <button 
                onClick={() => handleVote('human')}
+               disabled={isVoting}
                className="group relative bg-black border border-green-900/30 rounded-xl overflow-hidden hover:border-green-500 transition-all text-left h-96 outline-none ring-0 caret-transparent select-none"
              >
                {/* Background Image */}
@@ -311,13 +334,23 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
            </div>
         </div>
       </div>
+      </>
     );
   }
 
   // --- RESULT VIEW ---
   if (gameState === 'finished') {
+    const payout = parseFloat(realStake) * 2 * 0.95; // 95% after fee
+    const hasWinnings = winningsBalance && BigInt(winningsBalance as any) > BigInt(0);
+
     return (
-      <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
+      <>
+        <TransactionOverlay 
+          isVisible={isClaiming} 
+          message="CLAIMING WINNINGS" 
+          subMessage="Transferring your reward to wallet..."
+        />
+        <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-10" />
         
         <div className="max-w-4xl w-full z-10 space-y-8">
@@ -326,7 +359,9 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                <Terminal className="w-4 h-4" /> DECRYPTION PROTOCOL FINALIZED
              </div>
              <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tighter">SYSTEM ANALYSIS COMPLETE</h1>
-             <p className="text-red-500 font-bold tracking-widest bg-red-500/10 inline-block px-4 py-1 rounded">MATCH ID: #9X82 // DECEPTION DETECTED</p>
+             <p className={`font-bold tracking-widest inline-block px-4 py-1 rounded ${isCorrectGuess ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'}`}>
+               MATCH ID: #{arenaId} // {isCorrectGuess ? 'CORRECT IDENTIFICATION' : 'DECEPTION DETECTED'}
+             </p>
            </div>
 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -334,29 +369,31 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
              <div className="bg-secondary/50 border border-muted rounded-lg p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
                <div className="w-48 h-48 border border-primary/30 rounded-full flex items-center justify-center mb-6 relative">
                   <div className="absolute inset-0 border border-primary/20 rounded-full animate-ping opacity-20" />
-                  <User className="w-24 h-24 text-white" />
+                  {isPlayer2Bot ? <Bot className="w-24 h-24 text-red-500" /> : <User className="w-24 h-24 text-green-500" />}
                </div>
                
                <div className="w-full space-y-6">
                  <div className="flex justify-between items-center border-b border-muted pb-4">
                    <span className="text-gray-500 text-xs uppercase tracking-widest">Your Hypothesis</span>
                    <div className="flex items-center gap-2 text-primary font-bold">
-                     <Bot className="w-4 h-4" /> AI AGENT
+                     {player1GuessedBot ? <><Bot className="w-4 h-4" /> AI AGENT</> : <><User className="w-4 h-4" /> HUMAN</>}
                    </div>
                  </div>
                  
                  <div className="flex justify-between items-center">
                    <span className="text-gray-500 text-xs uppercase tracking-widest">True Identity</span>
-                   <div className="flex items-center gap-2 text-white font-bold text-xl">
-                     <User className="w-5 h-5" /> HUMAN
+                   <div className={`flex items-center gap-2 font-bold text-xl ${isPlayer2Bot ? 'text-red-500' : 'text-green-500'}`}>
+                     {isPlayer2Bot ? <><Bot className="w-5 h-5" /> BOT</> : <><User className="w-5 h-5" /> HUMAN</>}
                    </div>
                  </div>
 
-                 <div className="bg-red-500/10 border border-red-500/50 p-4 rounded text-left flex gap-4">
-                    <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />
+                 <div className={`p-4 rounded text-left flex gap-4 ${isCorrectGuess ? 'bg-green-500/10 border border-green-500/50' : 'bg-red-500/10 border border-red-500/50'}`}>
+                    {isCorrectGuess ? <CheckCircle className="w-6 h-6 text-green-500 shrink-0" /> : <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />}
                     <div>
-                      <div className="text-red-500 font-bold text-sm">RESULT: INCORRECT</div>
-                      <p className="text-red-400/80 text-xs">Opponent successfully mimicked AI behavior protocols.</p>
+                      <div className={`font-bold text-sm ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>RESULT: {isCorrectGuess ? 'CORRECT' : 'INCORRECT'}</div>
+                      <p className={`text-xs ${isCorrectGuess ? 'text-green-400/80' : 'text-red-400/80'}`}>
+                        {isCorrectGuess ? 'Your analysis was correct. You have been rewarded.' : 'Opponent successfully deceived you.'}
+                      </p>
                     </div>
                  </div>
                </div>
@@ -369,11 +406,29 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
                    <div className="text-2xl font-bold text-white">{realStake} MNT</div>
                  </div>
-                 <div className="bg-red-900/10 border border-red-900/50 p-6 rounded-lg">
-                   <div className="text-red-500 text-xs uppercase tracking-widest mb-2">Settlement</div>
-                   <div className="text-2xl font-bold text-red-500">-{realStake} MNT <span className="text-xs opacity-70">-100%</span></div>
+                 <div className={`p-6 rounded-lg ${isCorrectGuess ? 'bg-green-900/10 border border-green-900/50' : 'bg-red-900/10 border border-red-900/50'}`}>
+                   <div className={`text-xs uppercase tracking-widest mb-2 ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>Settlement</div>
+                   <div className={`text-2xl font-bold ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>
+                     {isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
+                   </div>
                  </div>
                </div>
+
+               {/* Claim Button */}
+               {hasWinnings && !isClaimed ? (
+                 <button 
+                   onClick={() => claimWinnings()}
+                   disabled={isClaiming}
+                   className="w-full bg-green-600 text-white font-bold py-4 rounded hover:bg-green-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                 >
+                   {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                   {isClaiming ? 'CLAIMING...' : `CLAIM ${formatEther(winningsBalance as bigint)} MNT`}
+                 </button>
+               ) : isClaimed ? (
+                 <div className="w-full bg-green-600/20 border border-green-500/50 text-green-500 font-bold py-4 rounded flex items-center justify-center gap-2">
+                   <CheckCircle className="w-5 h-5" /> WINNINGS CLAIMED!
+                 </div>
+               ) : null}
                
                <button 
                  onClick={() => router.push('/arena')}
@@ -394,6 +449,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
            </div>
         </div>
       </div>
+      </>
     );
   }
 

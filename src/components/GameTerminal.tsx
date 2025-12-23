@@ -7,6 +7,7 @@ import { useAccount } from 'wagmi';
 import { useGameStatus, useJoinGame, useSubmitVerdict, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
 import { formatEther } from 'viem';
 import TransactionOverlay from './TransactionOverlay';
+import { io, Socket } from "socket.io-client";
 
 type Message = {
   id: number;
@@ -35,8 +36,10 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [timeLeft, setTimeLeft] = useState(60);
   const [votingTimeLeft, setVotingTimeLeft] = useState(15);
   const [realStake, setRealStake] = useState<string>(stakeAmount);
+  const [isOpponentTyping, setIsOpponentTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const socketRef = useRef<Socket | null>(null);
 
   // Derive result info from gameData
   // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted]
@@ -45,6 +48,52 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const winner = gameData ? (gameData as any)[4] : null;
   const isWinner = winner && address && winner.toLowerCase() === address.toLowerCase();
   const isCorrectGuess = player1GuessedBot === isPlayer2Bot;
+
+  // Initialize Socket.io
+  useEffect(() => {
+    // Connect to local socket server
+    const socket = io("http://localhost:3001");
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("Connected to Nervous System");
+      if (arenaId) {
+        socket.emit("join_game", arenaId);
+      }
+    });
+
+    socket.on("chat_message", (msg: any) => {
+      // Determine sender type based on message source
+      // In this simple version, if it's not 'me' (sent by client), it's 'opponent'
+      // Ideally we check wallet address or user ID
+      const isMe = msg.sender === address; 
+      const senderType = isMe ? 'me' : 'opponent';
+
+      // Don't duplicate own messages if we add them optimistically (which we do below)
+      if (!isMe) {
+          setMessages((prev) => [...prev, { 
+              id: msg.id, 
+              sender: senderType, 
+              text: msg.text, 
+              timestamp: msg.timestamp 
+          }]);
+      }
+    });
+
+    socket.on("typing", (msg: any) => {
+        if (msg.sender !== address) {
+            setIsOpponentTyping(msg.isTyping);
+        }
+    });
+
+    socket.on("system_message", (msg: any) => {
+        addSystemMessage(msg.text);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [arenaId, address]);
 
   // Sync Game State
   useEffect(() => {
@@ -106,7 +155,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isOpponentTyping]);
 
   // Interactive Progress Bar
   const [progress, setProgress] = useState(0);
@@ -128,24 +177,21 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
 
   const sendMessage = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !socketRef.current) return;
 
-    const newMessage: Message = { id: Date.now() + Math.random(), sender: 'me', text: inputText, timestamp: Date.now() };
+    const text = inputText;
+    
+    // Optimistic Update
+    const newMessage: Message = { id: Date.now(), sender: 'me', text, timestamp: Date.now() };
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
 
-    // Mock Opponent Reply
-    setTimeout(() => {
-      const replies = [
-        "I assure you, my neural patterns are biological.",
-        "That is an impossible task for any finite system.",
-        "Are you testing my logic or my patience?",
-        "Orange flakes upon the steel, Time's slow bite is what I feel.",
-        "Greetings. I am ready to begin the interaction."
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'opponent', text: randomReply, timestamp: Date.now() }]);
-    }, 1000 + Math.random() * 2000);
+    // Send to Server
+    socketRef.current.emit("chat_message", {
+        gameId: arenaId,
+        text,
+        sender: address // Use wallet address as sender ID
+    });
   };
 
   const handleVote = (vote: 'human' | 'bot') => {
@@ -414,15 +460,15 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                  </div>
                </div>
 
-               {/* Claim Button */}
-               {hasWinnings && !isClaimed ? (
+               {/* Claim Button - Only show if won current game OR if explicitly requested (but user asked to hide if lost) */}
+               {hasWinnings && !isClaimed && isCorrectGuess ? (
                  <button 
                    onClick={() => claimWinnings()}
                    disabled={isClaiming}
                    className="w-full bg-green-600 text-white font-bold py-4 rounded hover:bg-green-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                  >
                    {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                   {isClaiming ? 'CLAIMING...' : `CLAIM ${formatEther(winningsBalance as bigint)} MNT`}
+                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isCorrectGuess ? 'PRIZE' : 'PREVIOUS WINNINGS'} (${formatEther(winningsBalance as bigint)} MNT)`}
                  </button>
                ) : isClaimed ? (
                  <div className="w-full bg-green-600/20 border border-green-500/50 text-green-500 font-bold py-4 rounded flex items-center justify-center gap-2">
@@ -537,6 +583,22 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                  )}
                </div>
              ))}
+             
+             {/* Typing Indicator */}
+             {isOpponentTyping && (
+                <div className="flex flex-col items-start max-w-3xl mx-auto w-full">
+                   <div className="flex items-center gap-2 mb-1">
+                      <div className="bg-muted p-1 rounded"><Bot className="w-3 h-3 text-gray-400" /></div>
+                      <span className="text-[10px] text-gray-500 uppercase tracking-widest">UNKNOWN ENTITY [ID: 9X-22]</span>
+                   </div>
+                   <div className="bg-secondary/80 border border-muted text-gray-300 rounded-lg rounded-tl-none p-4 flex items-center gap-1">
+                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                   </div>
+                </div>
+             )}
+
              <div ref={messagesEndRef} />
           </div>
 

@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as dotenv from "dotenv";
 import { createInterface } from 'readline';
 import { fileURLToPath } from 'url';
+import * as path from 'path';
 
 // Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });

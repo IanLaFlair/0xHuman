@@ -29,6 +29,32 @@ const wallet = createWalletClient({
     transport: http()
 });
 
+// Nonce management to prevent nonce conflicts
+let currentNonce: number | null = null;
+let nonceLock = false;
+
+async function getNonce(): Promise<number> {
+    while (nonceLock) {
+        await new Promise(r => setTimeout(r, 100));
+    }
+    nonceLock = true;
+    try {
+        if (currentNonce === null) {
+            currentNonce = await client.getTransactionCount({ address: account.address });
+        }
+        const nonce = currentNonce;
+        currentNonce++;
+        return nonce;
+    } finally {
+        nonceLock = false;
+    }
+}
+
+// Reset nonce on error (to resync with chain)
+function resetNonce() {
+    currentNonce = null;
+}
+
 // ABI for GameCreated event and joinGame function
 const ABI = [
     {
@@ -91,55 +117,91 @@ socket.on("connect", () => {
     console.log("🔌 Bot connected to Nervous System (Socket.io)");
 });
 
-// Listen for when human player votes - bot should vote too
-socket.on("voteReceived", async (data: { gameId: number, success: boolean }) => {
-    const gameId = data.gameId;
+// Helper function for bot voting
+async function submitBotVote(gameId: number, immediate: boolean = false) {
     const state = gameStates.get(gameId.toString());
 
-    // Only vote if this is a bot game and we haven't voted yet
-    if (botGames.has(gameId) && state && !state.hasVoted) {
-        console.log(`🗳️ Human voted in game ${gameId}, bot will vote too...`);
+    // Only vote if we haven't voted yet
+    if (state?.hasVoted) {
+        console.log(`⏭️ Already voted in game ${gameId}, skipping...`);
+        return;
+    }
 
-        // Mark as voted to prevent double voting
+    // Mark as voted to prevent double voting
+    if (state) {
         state.hasVoted = true;
         gameStates.set(gameId.toString(), state);
+    }
 
+    const doVote = async () => {
+        try {
+            // Bot randomly guesses (50/50) - AI doesn't actually know if opponent is human
+            const guessedBot = Math.random() > 0.5;
+
+            // Create message hash that matches contract's abi.encodePacked format
+            const messageHash = keccak256(
+                encodePacked(
+                    ['uint256', 'bool', 'string'],
+                    [BigInt(gameId), guessedBot, 'VOTE']
+                )
+            );
+
+            // Sign the hash with bot's private key
+            const signature = await signMessage({
+                message: { raw: messageHash },
+                privateKey: PRIVATE_KEY
+            });
+
+            console.log(`🤖 Bot voting in game ${gameId}: ${guessedBot ? 'BOT' : 'HUMAN'}`);
+
+            // Submit signed vote to server
+            socket.emit('submitSignedVote', {
+                gameId,
+                playerAddress: account.address,
+                guessedBot,
+                signature
+            });
+
+        } catch (error: any) {
+            console.error(`❌ Bot vote failed for game ${gameId}:`, error.message);
+        }
+    };
+
+    if (immediate) {
+        // Vote immediately without delay
+        await doVote();
+    } else {
         // Add human-like delay (1-3 seconds)
         const voteDelay = 1000 + Math.random() * 2000;
+        setTimeout(doVote, voteDelay);
+    }
+}
 
-        setTimeout(async () => {
-            try {
-                // Bot randomly guesses (50/50) - AI doesn't actually know if opponent is human
-                const guessedBot = Math.random() > 0.5;
+// Listen for urgent vote request from server (when P1 votes in bot game)
+socket.on("botVoteNeeded", async (data: { gameId: number, urgency: string }) => {
+    const gameId = data.gameId;
+    console.log(`⚡ Urgent vote request for game ${gameId}!`);
 
-                // Create message hash that matches contract's abi.encodePacked format
-                const messageHash = keccak256(
-                    encodePacked(
-                        ['uint256', 'bool', 'string'],
-                        [BigInt(gameId), guessedBot, 'VOTE']
-                    )
-                );
+    // Make sure we're tracking this game
+    if (!botGames.has(gameId)) {
+        botGames.add(gameId);
+    }
+    if (!gameStates.has(gameId.toString())) {
+        gameStates.set(gameId.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });
+    }
 
-                // Sign the hash with bot's private key
-                const signature = await signMessage({
-                    message: { raw: messageHash },
-                    privateKey: PRIVATE_KEY
-                });
+    // Vote immediately
+    await submitBotVote(gameId, true);
+});
 
-                console.log(`🤖 Bot voting in game ${gameId}: ${guessedBot ? 'BOT' : 'HUMAN'}`);
+// Listen for when human player votes - bot should vote too (backup trigger)
+socket.on("voteReceived", async (data: { gameId: number, success: boolean }) => {
+    const gameId = data.gameId;
 
-                // Submit signed vote to server
-                socket.emit('submitSignedVote', {
-                    gameId,
-                    playerAddress: account.address,
-                    guessedBot,
-                    signature
-                });
-
-            } catch (error: any) {
-                console.error(`❌ Bot vote failed for game ${gameId}:`, error.message);
-            }
-        }, voteDelay);
+    // Only vote if this is a bot game
+    if (botGames.has(gameId)) {
+        console.log(`🗳️ voteReceived in game ${gameId}, checking if we should vote...`);
+        await submitBotVote(gameId, false);
     }
 });
 
@@ -147,8 +209,22 @@ socket.on("chat_message", async (msg: any) => {
     // Ignore own messages
     if (msg.sender === 'bot') return;
 
+    // Track this game as a bot game (important for voting after restart)
+    const gameIdNum = typeof msg.gameId === 'string' ? parseInt(msg.gameId) : msg.gameId;
+    if (!botGames.has(gameIdNum)) {
+        console.log(`📌 Tracking game ${gameIdNum} as bot game (received message)`);
+        botGames.add(gameIdNum);
+        // Also join the socket room to receive vote events
+        socket.emit("join_game", msg.gameId.toString());
+    }
+
+    // Initialize game state if not exists
+    if (!gameStates.has(msg.gameId.toString())) {
+        gameStates.set(msg.gameId.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });
+    }
+
     // Mark as received message so we don't auto-greet later
-    const state = gameStates.get(msg.gameId.toString()) || { hasReceivedMessage: false, hasGreeted: false, hasVoted: false };
+    const state = gameStates.get(msg.gameId.toString())!;
     state.hasReceivedMessage = true;
     gameStates.set(msg.gameId.toString(), state);
 
@@ -238,12 +314,14 @@ async function scanOpenGames() {
                 // Join Contract
                 console.log(`   Joining Game #${i}...`);
                 try {
+                    const nonce = await getNonce();
                     const hash = await wallet.writeContract({
                         address: CONTRACT_ADDRESS,
                         abi: ABI,
                         functionName: 'joinGame',
                         args: [BigInt(i), true], // isBot = true
-                        value: stake
+                        value: stake,
+                        nonce
                     });
                     console.log(`✅ Transaction sent: ${hash}`);
 
@@ -284,8 +362,9 @@ async function scanOpenGames() {
                         }
                     }, greetingDelay);
 
-                } catch (error) {
-                    console.error(`❌ Failed to join game ${i}:`, error);
+                } catch (error: any) {
+                    console.error(`❌ Failed to join game ${i}:`, error.message || error);
+                    resetNonce(); // Reset nonce on failure
                 }
             }
         }
@@ -350,12 +429,14 @@ async function main() {
 
                         console.log(`⚡ Now joining Game ${gameId}...`);
 
+                        const nonce = await getNonce();
                         const hash = await wallet.writeContract({
                             address: CONTRACT_ADDRESS,
                             abi: ABI,
                             functionName: 'joinGame',
                             args: [gameId, true], // isBot = true
-                            value: stake
+                            value: stake,
+                            nonce
                         });
                         console.log(`✅ Transaction sent: ${hash}`);
 
@@ -396,8 +477,9 @@ async function main() {
                             }
                         }, greetingDelay);
 
-                    } catch (error) {
-                        console.error(`❌ Failed to join game:`, error);
+                    } catch (error: any) {
+                        console.error(`❌ Failed to join game:`, error.message || error);
+                        resetNonce(); // Reset nonce on failure
                     }
                 }, joinDelay); // End of setTimeout for delayed join
             }

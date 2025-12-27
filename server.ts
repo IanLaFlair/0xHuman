@@ -141,10 +141,17 @@ io.on("connection", (socket) => {
 
             // Store vote based on player
             const voteData: VoteData = { guessedBot, signature, playerAddress };
+            const isPlayer2Bot = gameData[6]; // isPlayer2Bot from contract
 
             if (voterAddress === player1) {
                 votes.p1 = voteData;
                 console.log(`✓ P1 vote stored for game ${gameId}`);
+
+                // If P2 is a bot and hasn't voted yet, emit special event to trigger immediate bot vote
+                if (isPlayer2Bot && !votes.p2) {
+                    console.log(`🤖 P2 is bot, signaling bot to vote immediately...`);
+                    io.to(gameId.toString()).emit("botVoteNeeded", { gameId, urgency: "immediate" });
+                }
             } else if (voterAddress === player2) {
                 votes.p2 = voteData;
                 console.log(`✓ P2 vote stored for game ${gameId}`);
@@ -156,6 +163,8 @@ io.on("connection", (socket) => {
 
             // Emit vote received confirmation
             socket.emit("voteReceived", { gameId, success: true });
+            // Also broadcast to room so bot can hear if needed
+            io.to(gameId.toString()).emit("voteReceived", { gameId, success: true });
 
             // If both have voted, resolve the game
             if (votes.p1 && votes.p2) {

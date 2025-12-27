@@ -119,10 +119,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         addSystemMessage("MATCH FOUND. CONNECTING...");
     });
     
-    // Listen for vote confirmation
+    // Listen for vote confirmation - only update if this is the player's own vote
+    // Note: This is for optimistic UI update after local signing
+    // The server broadcasts to the room, but we only care about our own vote here
     socket.on("voteReceived", (data: any) => {
         console.log("Vote received by server:", data);
-        setHasSignedVote(true);
+        // Don't set hasSignedVote here - it's handled in handleVote() after signing
+        // This event is broadcast to the room for coordination, not for UI state changes
     });
     
     // Listen for game resolution with txHash

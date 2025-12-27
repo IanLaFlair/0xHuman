@@ -72,8 +72,10 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
 
   // Initialize Socket.io
   useEffect(() => {
-    // Connect to local socket server
-    const socket = io("http://localhost:3001");
+    const socketUrl = typeof window !== 'undefined' 
+      ? `${window.location.protocol}//${window.location.hostname}:3001` 
+      : 'http://localhost:3001';
+    const socket = io(socketUrl);
     socketRef.current = socket;
 
     socket.on("connect", () => {

@@ -72,8 +72,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
 
   // Initialize Socket.io
   useEffect(() => {
-    const socketUrl = typeof window !== 'undefined' 
-      ? `${window.location.protocol}//${window.location.hostname}:3001` 
+    // In production (0xhuman.fun), Caddy proxies /socket.io to port 3001
+    // In development (localhost:3000), connect directly to port 3001
+    const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+    const socketUrl = isProduction
+      ? window.location.origin  // Uses same origin, Caddy routes /socket.io/* to :3001
       : 'http://localhost:3001';
     const socket = io(socketUrl);
     socketRef.current = socket;

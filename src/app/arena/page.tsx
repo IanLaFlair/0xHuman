@@ -8,7 +8,8 @@ import { Loader2, Users, Zap, Trophy, Shield, Terminal, ArrowRight, Swords } fro
 import Navbar from '@/components/Navbar';
 import { useCreateGame, useJoinGame, useFindMatch } from '@/hooks/useOxHuman';
 import { decodeEventLog } from 'viem';
-import OxHumanABI from '@/contracts/OxHumanABI.json';
+import OxHumanArtifact from '@/contracts/OxHumanABI.json';
+const OxHumanABI = OxHumanArtifact.abi;
 
 export default function ArenaPage() {
   const { isConnected } = useAccount();

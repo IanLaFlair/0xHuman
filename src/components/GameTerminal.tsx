@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
-import { useGameStatus, useJoinGame, useSubmitVerdict, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
-import { formatEther } from 'viem';
+import { useAccount, useSignMessage } from 'wagmi';
+import { useGameStatus, useJoinGame, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
+import { formatEther, keccak256, encodePacked, toHex } from 'viem';
 import TransactionOverlay from './TransactionOverlay';
 import { io, Socket } from "socket.io-client";
 
@@ -22,12 +22,12 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const { address } = useAccount();
   const { data: gameData, isLoading: isLoadingGame } = useGameStatus(parseInt(arenaId));
   const { joinGame, isPending: isJoining, isConfirmed: isJoined } = useJoinGame();
-  const { submitVerdict, isPending: isVotingPending, isConfirming: isVotingConfirming, isConfirmed: isVoted } = useSubmitVerdict();
   const { claimWinnings, isPending: isClaimingPending, isConfirming: isClaimingConfirming, isConfirmed: isClaimed } = useClaimWinnings();
   const { data: winningsBalance, refetch: refetchWinnings } = useWinningsBalance(address);
+  const { signMessageAsync, isPending: isSigningVote } = useSignMessage();
 
   // Combined loading states for UX
-  const isVoting = isVotingPending || isVotingConfirming;
+  const isVoting = isSigningVote;
   const isClaiming = isClaimingPending || isClaimingConfirming;
   
   const [gameState, setGameState] = useState<GameState>('searching');
@@ -37,17 +37,38 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [votingTimeLeft, setVotingTimeLeft] = useState(15);
   const [realStake, setRealStake] = useState<string>(stakeAmount);
   const [isOpponentTyping, setIsOpponentTyping] = useState(false);
+  const [gameStartTime, setGameStartTime] = useState<number | null>(null); // Track when game actually started
+  const [isUserTyping, setIsUserTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
+  const [resolutionTxHash, setResolutionTxHash] = useState<string | null>(null);
+  const [hasSignedVote, setHasSignedVote] = useState(false);
 
   // Derive result info from gameData
-  // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted]
+  // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted, player2GuessedBot, player2Submitted]
+  const player1Address = gameData ? (gameData as any)[0] : null;
+  const player2Address = gameData ? (gameData as any)[1] : null;
+  const isPlayer1 = address && player1Address && address.toLowerCase() === player1Address.toLowerCase();
+  const isPlayer2 = address && player2Address && address.toLowerCase() === player2Address.toLowerCase();
+  
   const isPlayer2Bot = gameData ? Boolean((gameData as any)[6]) : false;
   const player1GuessedBot = gameData ? Boolean((gameData as any)[7]) : false;
+  const player1Submitted = gameData ? Boolean((gameData as any)[8]) : false;
+  const player2GuessedBot = gameData ? Boolean((gameData as any)[9]) : false;
+  const player2Submitted = gameData ? Boolean((gameData as any)[10]) : false;
+  
   const winner = gameData ? (gameData as any)[4] : null;
+  const isDraw = winner === '0x0000000000000000000000000000000000000000';
   const isWinner = winner && address && winner.toLowerCase() === address.toLowerCase();
-  const isCorrectGuess = player1GuessedBot === isPlayer2Bot;
+  
+  // For result display
+  const myGuessedBot = isPlayer1 ? player1GuessedBot : player2GuessedBot;
+  const mySubmitted = isPlayer1 ? player1Submitted : player2Submitted;
+  // In PvP (both human), correct guess is "Human" (guessedBot = false)
+  // In vs Bot, correct guess depends on isPlayer2Bot
+  const opponentIsBot = isPlayer1 ? isPlayer2Bot : false; // P1 always human
+  const isCorrectGuess = myGuessedBot === opponentIsBot;
 
   // Initialize Socket.io
   useEffect(() => {
@@ -90,6 +111,24 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         addSystemMessage(msg.text);
     });
 
+    // Listen for opponent joined event (for faster UX before contract sync)
+    socket.on("opponent_joined", (data: any) => {
+        console.log("Opponent joined! Match starting...", data);
+        addSystemMessage("MATCH FOUND. CONNECTING...");
+    });
+    
+    // Listen for vote confirmation
+    socket.on("voteReceived", (data: any) => {
+        console.log("Vote received by server:", data);
+        setHasSignedVote(true);
+    });
+    
+    // Listen for game resolution with txHash
+    socket.on("gameResolved", (data: { gameId: number, txHash: string }) => {
+        console.log("Game resolved! TX:", data.txHash);
+        setResolutionTxHash(data.txHash);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -108,6 +147,13 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
       if (gameState !== 'playing' && gameState !== 'voting' && gameState !== 'finished') {
         setGameState('playing');
         addSystemMessage("OPPONENT CONNECTED. SESSION START.");
+        
+        // Set game start time to NOW when we first detect the game is Active
+        // This ensures timer starts fresh when opponent joins, not from creation time
+        if (!gameStartTime) {
+          setGameStartTime(Date.now());
+          setTimeLeft(60); // Full 60 seconds
+        }
       }
       
       // Update Stake from Contract
@@ -116,12 +162,15 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         setRealStake(formatEther(stakeWei));
       }
 
-      // Sync Timer with Blockchain Timestamp
-      const startTime = Number((gameData as any)[5]);
-      const now = Math.floor(Date.now() / 1000);
-      const elapsed = now - startTime;
-      const remaining = Math.max(0, 60 - elapsed);
-      setTimeLeft(remaining);
+      // If we already have a start time, calculate remaining based on that
+      if (gameStartTime) {
+        const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+        const remaining = Math.max(0, 60 - elapsed);
+        // Only update if significantly different to avoid jumping
+        if (Math.abs(remaining - timeLeft) > 2) {
+          setTimeLeft(remaining);
+        }
+      }
 
     } else if (status === 2) {
        setGameState('finished');
@@ -175,11 +224,49 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     setMessages((prev) => [...prev, { id: Date.now() + Math.random(), sender: 'system', text, timestamp: Date.now() }]);
   };
 
+  // Typing indicator emission with debounce
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputText(value);
+    
+    if (!socketRef.current) return;
+    
+    // Emit typing start
+    if (value.trim() && !isUserTyping) {
+      setIsUserTyping(true);
+      socketRef.current.emit("typing", { gameId: arenaId, sender: address, isTyping: true });
+    }
+    
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set timeout to stop typing indicator after 2 seconds of no input
+    typingTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current && isUserTyping) {
+        setIsUserTyping(false);
+        socketRef.current.emit("typing", { gameId: arenaId, sender: address, isTyping: false });
+      }
+    }, 2000);
+  };
+
   const sendMessage = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputText.trim() || !socketRef.current) return;
 
     const text = inputText;
+    
+    // Stop typing indicator when sending
+    if (isUserTyping) {
+      setIsUserTyping(false);
+      socketRef.current.emit("typing", { gameId: arenaId, sender: address, isTyping: false });
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
     
     // Optimistic Update
     const newMessage: Message = { id: Date.now(), sender: 'me', text, timestamp: Date.now() };
@@ -194,8 +281,48 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     });
   };
 
-  const handleVote = (vote: 'human' | 'bot') => {
-    submitVerdict(parseInt(arenaId), vote === 'bot');
+  const handleVote = async (vote: 'human' | 'bot') => {
+    // Guard against multiple submissions
+    if (mySubmitted || isVoting || hasSignedVote) {
+      console.log('Vote already submitted or in progress, ignoring click');
+      return;
+    }
+    
+    const guessedBot = vote === 'bot';
+    const gameId = parseInt(arenaId);
+    
+    try {
+      console.log('Signing vote:', vote);
+      
+      // Create message hash that matches contract's abi.encodePacked format
+      // Contract does: keccak256(abi.encodePacked(_gameId, _guessedBot, "VOTE"))
+      const messageHash = keccak256(
+        encodePacked(
+          ['uint256', 'bool', 'string'],
+          [BigInt(gameId), guessedBot, 'VOTE']
+        )
+      );
+      
+      // Sign the hash (MetaMask will popup, but FREE - no gas!)
+      // We sign the raw bytes of the hash
+      const signature = await signMessageAsync({ message: { raw: messageHash } });
+      
+      console.log('Vote signed, sending to server...');
+      
+      // Send signed vote to server
+      socketRef.current?.emit('submitSignedVote', {
+        gameId,
+        playerAddress: address,
+        guessedBot,
+        signature
+      });
+      
+      setHasSignedVote(true);
+    } catch (error: any) {
+      console.error('Error signing vote:', error.message);
+      // User rejected signature or error - allow retry
+      setHasSignedVote(false);
+    }
   };
 
   // --- MATCHMAKING VIEW ---
@@ -290,6 +417,54 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
 
   // --- VOTING VIEW ---
   if (gameState === 'voting') {
+    // Check if current player has already submitted verdict
+    const hasAlreadySubmitted = mySubmitted;
+    const gameStatus = gameData ? Number((gameData as any)[3]) : 0;
+    
+    // Show waiting screen if:
+    // 1. Contract confirms player has submitted (mySubmitted = true) AND game not resolved yet, OR
+    // 2. Transaction/signing is in progress (isVoting = true), OR
+    // 3. User has signed their vote (hasSignedVote = true) - waiting for server to resolve
+    const isWaitingForOpponent = (hasAlreadySubmitted && gameStatus !== 2) || isVoting || hasSignedVote;
+    
+    // If already submitted and waiting for opponent, show waiting screen
+    if (isWaitingForOpponent) {
+      return (
+        <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+          
+          <div className="max-w-lg w-full z-10 text-center space-y-8">
+            <div className="relative w-48 h-48 mx-auto">
+              <div className="absolute inset-0 border-4 border-primary/30 rounded-full animate-ping" />
+              <div className="absolute inset-2 border-4 border-primary/50 rounded-full animate-pulse" />
+              <div className="absolute inset-4 border-4 border-primary rounded-full flex items-center justify-center">
+                <Clock className="w-16 h-16 text-primary animate-pulse" />
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <h1 className="text-3xl md:text-4xl font-bold text-white">
+                {gameStatus === 2 ? 'RESOLVING...' : 'AWAITING OPPONENT'}
+              </h1>
+              <p className="text-gray-400">
+                {gameStatus === 2 
+                  ? 'Game resolved! Loading results...' 
+                  : 'Your verdict has been recorded. Waiting for opponent to submit their prediction...'}
+              </p>
+              <div className="inline-block bg-primary/20 border border-primary/50 text-primary px-4 py-2 rounded-lg text-sm">
+                <Loader2 className="w-4 h-4 inline animate-spin mr-2" />
+                {gameStatus === 2 ? 'Syncing result...' : 'Polling chain for resolution...'}
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-500">
+              Do not close this window. {gameStatus === 2 ? 'Results loading...' : 'The game will automatically resolve once both players have voted.'}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <>
         <TransactionOverlay 
@@ -405,9 +580,22 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                <Terminal className="w-4 h-4" /> DECRYPTION PROTOCOL FINALIZED
              </div>
              <h1 className="text-5xl md:text-6xl font-bold text-white tracking-tighter">SYSTEM ANALYSIS COMPLETE</h1>
-             <p className={`font-bold tracking-widest inline-block px-4 py-1 rounded ${isCorrectGuess ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'}`}>
-               MATCH ID: #{arenaId} // {isCorrectGuess ? 'CORRECT IDENTIFICATION' : 'DECEPTION DETECTED'}
+             <p className={`font-bold tracking-widest inline-block px-4 py-1 rounded ${
+               isDraw ? 'text-yellow-500 bg-yellow-500/10' : 
+               isCorrectGuess ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'
+             }`}>
+               MATCH ID: #{arenaId} // {isDraw ? 'DRAW - STAKES REFUNDED' : isCorrectGuess ? 'CORRECT IDENTIFICATION' : 'DECEPTION DETECTED'}
              </p>
+             {resolutionTxHash && (
+               <a 
+                 href={`https://sepolia.mantlescan.xyz/tx/${resolutionTxHash}`}
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="text-xs text-gray-500 hover:text-primary transition-colors"
+               >
+                 View Resolution TX: {resolutionTxHash.slice(0, 10)}...{resolutionTxHash.slice(-8)} ↗
+               </a>
+             )}
            </div>
 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -415,30 +603,40 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
              <div className="bg-secondary/50 border border-muted rounded-lg p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
                <div className="w-48 h-48 border border-primary/30 rounded-full flex items-center justify-center mb-6 relative">
                   <div className="absolute inset-0 border border-primary/20 rounded-full animate-ping opacity-20" />
-                  {isPlayer2Bot ? <Bot className="w-24 h-24 text-red-500" /> : <User className="w-24 h-24 text-green-500" />}
+                  {/* In PvP, opponent is always human for both players */}
+                  {opponentIsBot ? <Bot className="w-24 h-24 text-red-500" /> : <User className="w-24 h-24 text-green-500" />}
                </div>
                
                <div className="w-full space-y-6">
                  <div className="flex justify-between items-center border-b border-muted pb-4">
                    <span className="text-gray-500 text-xs uppercase tracking-widest">Your Hypothesis</span>
                    <div className="flex items-center gap-2 text-primary font-bold">
-                     {player1GuessedBot ? <><Bot className="w-4 h-4" /> AI AGENT</> : <><User className="w-4 h-4" /> HUMAN</>}
+                     {myGuessedBot ? <><Bot className="w-4 h-4" /> AI AGENT</> : <><User className="w-4 h-4" /> HUMAN</>}
                    </div>
                  </div>
                  
                  <div className="flex justify-between items-center">
-                   <span className="text-gray-500 text-xs uppercase tracking-widest">True Identity</span>
-                   <div className={`flex items-center gap-2 font-bold text-xl ${isPlayer2Bot ? 'text-red-500' : 'text-green-500'}`}>
-                     {isPlayer2Bot ? <><Bot className="w-5 h-5" /> BOT</> : <><User className="w-5 h-5" /> HUMAN</>}
+                   <span className="text-gray-500 text-xs uppercase tracking-widest">Opponent&apos;s True Identity</span>
+                   <div className={`flex items-center gap-2 font-bold text-xl ${opponentIsBot ? 'text-red-500' : 'text-green-500'}`}>
+                     {opponentIsBot ? <><Bot className="w-5 h-5" /> BOT</> : <><User className="w-5 h-5" /> HUMAN</>}
                    </div>
                  </div>
 
-                 <div className={`p-4 rounded text-left flex gap-4 ${isCorrectGuess ? 'bg-green-500/10 border border-green-500/50' : 'bg-red-500/10 border border-red-500/50'}`}>
-                    {isCorrectGuess ? <CheckCircle className="w-6 h-6 text-green-500 shrink-0" /> : <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />}
+                 <div className={`p-4 rounded text-left flex gap-4 ${
+                   isDraw ? 'bg-yellow-500/10 border border-yellow-500/50' :
+                   isCorrectGuess ? 'bg-green-500/10 border border-green-500/50' : 'bg-red-500/10 border border-red-500/50'
+                 }`}>
+                    {isDraw ? <AlertTriangle className="w-6 h-6 text-yellow-500 shrink-0" /> :
+                     isCorrectGuess ? <CheckCircle className="w-6 h-6 text-green-500 shrink-0" /> : <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />}
                     <div>
-                      <div className={`font-bold text-sm ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>RESULT: {isCorrectGuess ? 'CORRECT' : 'INCORRECT'}</div>
-                      <p className={`text-xs ${isCorrectGuess ? 'text-green-400/80' : 'text-red-400/80'}`}>
-                        {isCorrectGuess ? 'Your analysis was correct. You have been rewarded.' : 'Opponent successfully deceived you.'}
+                      <div className={`font-bold text-sm ${
+                        isDraw ? 'text-yellow-500' : isCorrectGuess ? 'text-green-500' : 'text-red-500'
+                      }`}>RESULT: {isDraw ? 'DRAW' : isCorrectGuess ? 'CORRECT' : 'INCORRECT'}</div>
+                      <p className={`text-xs ${
+                        isDraw ? 'text-yellow-400/80' : isCorrectGuess ? 'text-green-400/80' : 'text-red-400/80'
+                      }`}>
+                        {isDraw ? 'Both players made the same guess. Stakes refunded (minus fee).' :
+                         isCorrectGuess ? 'Your analysis was correct. You have been rewarded.' : 'Opponent successfully deceived you.'}
                       </p>
                     </div>
                  </div>
@@ -452,23 +650,30 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
                    <div className="text-2xl font-bold text-white">{realStake} MNT</div>
                  </div>
-                 <div className={`p-6 rounded-lg ${isCorrectGuess ? 'bg-green-900/10 border border-green-900/50' : 'bg-red-900/10 border border-red-900/50'}`}>
-                   <div className={`text-xs uppercase tracking-widest mb-2 ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>Settlement</div>
-                   <div className={`text-2xl font-bold ${isCorrectGuess ? 'text-green-500' : 'text-red-500'}`}>
-                     {isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
+                 <div className={`p-6 rounded-lg ${
+                   isDraw ? 'bg-yellow-900/10 border border-yellow-900/50' :
+                   isCorrectGuess ? 'bg-green-900/10 border border-green-900/50' : 'bg-red-900/10 border border-red-900/50'
+                 }`}>
+                   <div className={`text-xs uppercase tracking-widest mb-2 ${
+                     isDraw ? 'text-yellow-500' : isCorrectGuess ? 'text-green-500' : 'text-red-500'
+                   }`}>Settlement</div>
+                   <div className={`text-2xl font-bold ${
+                     isDraw ? 'text-yellow-500' : isCorrectGuess ? 'text-green-500' : 'text-red-500'
+                   }`}>
+                     {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
                    </div>
                  </div>
                </div>
 
-               {/* Claim Button - Only show if won current game OR if explicitly requested (but user asked to hide if lost) */}
-               {hasWinnings && !isClaimed && isCorrectGuess ? (
+               {/* Claim Button - Only show if won current game or draw (refund) */}
+               {hasWinnings && !isClaimed && (isCorrectGuess || isDraw) ? (
                  <button 
                    onClick={() => claimWinnings()}
                    disabled={isClaiming}
-                   className="w-full bg-green-600 text-white font-bold py-4 rounded hover:bg-green-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                   className={`w-full ${isDraw ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-4 rounded transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
                  >
                    {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isCorrectGuess ? 'PRIZE' : 'PREVIOUS WINNINGS'} (${formatEther(winningsBalance as bigint)} MNT)`}
+                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isDraw ? 'REFUND' : 'PRIZE'} (${formatEther(winningsBalance as bigint)} MNT)`}
                  </button>
                ) : isClaimed ? (
                  <div className="w-full bg-green-600/20 border border-green-500/50 text-green-500 font-bold py-4 rounded flex items-center justify-center gap-2">
@@ -610,7 +815,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                  <input
                    type="text"
                    value={inputText}
-                   onChange={(e) => setInputText(e.target.value)}
+                   onChange={handleInputChange}
                    placeholder="Input query here..."
                    className="w-full bg-black/50 border border-primary/30 rounded-lg py-4 pl-10 pr-12 text-white font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-gray-600"
                    autoFocus

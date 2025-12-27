@@ -1,9 +1,9 @@
-const hre = require("hardhat");
+import { ethers } from "hardhat";
 
 async function main() {
     console.log("Deploying OxHuman contract...");
 
-    const OxHuman = await hre.ethers.getContractFactory("OxHuman");
+    const OxHuman = await ethers.getContractFactory("OxHuman");
     const oxHuman = await OxHuman.deploy();
 
     await oxHuman.waitForDeployment();

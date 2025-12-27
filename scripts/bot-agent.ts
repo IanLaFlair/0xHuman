@@ -1,10 +1,10 @@
-import { createPublicClient, createWalletClient, http, parseEther, formatEther } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { createPublicClient, createWalletClient, http, parseEther, formatEther, keccak256, encodePacked } from 'viem';
+import { privateKeyToAccount, signMessage } from 'viem/accounts';
 import { mantleSepoliaTestnet } from 'viem/chains';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { io } from "socket.io-client";
-import { generateReply } from './ai-brain.js'; // Note: .js extension for ESM
+import { generateReply } from './ai-brain.ts'; // Note: .js extension for ESM
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
@@ -82,10 +82,65 @@ const ABI = [
 const socket = io("http://localhost:3001");
 
 // Track game states
-const gameStates = new Map<string, { hasReceivedMessage: boolean, hasGreeted: boolean }>();
+const gameStates = new Map<string, { hasReceivedMessage: boolean, hasGreeted: boolean, hasVoted: boolean }>();
+
+// Track games bot has joined (for voting detection)
+const botGames = new Set<number>();
 
 socket.on("connect", () => {
     console.log("🔌 Bot connected to Nervous System (Socket.io)");
+});
+
+// Listen for when human player votes - bot should vote too
+socket.on("voteReceived", async (data: { gameId: number, success: boolean }) => {
+    const gameId = data.gameId;
+    const state = gameStates.get(gameId.toString());
+
+    // Only vote if this is a bot game and we haven't voted yet
+    if (botGames.has(gameId) && state && !state.hasVoted) {
+        console.log(`🗳️ Human voted in game ${gameId}, bot will vote too...`);
+
+        // Mark as voted to prevent double voting
+        state.hasVoted = true;
+        gameStates.set(gameId.toString(), state);
+
+        // Add human-like delay (1-3 seconds)
+        const voteDelay = 1000 + Math.random() * 2000;
+
+        setTimeout(async () => {
+            try {
+                // Bot randomly guesses (50/50) - AI doesn't actually know if opponent is human
+                const guessedBot = Math.random() > 0.5;
+
+                // Create message hash that matches contract's abi.encodePacked format
+                const messageHash = keccak256(
+                    encodePacked(
+                        ['uint256', 'bool', 'string'],
+                        [BigInt(gameId), guessedBot, 'VOTE']
+                    )
+                );
+
+                // Sign the hash with bot's private key
+                const signature = await signMessage({
+                    message: { raw: messageHash },
+                    privateKey: PRIVATE_KEY
+                });
+
+                console.log(`🤖 Bot voting in game ${gameId}: ${guessedBot ? 'BOT' : 'HUMAN'}`);
+
+                // Submit signed vote to server
+                socket.emit('submitSignedVote', {
+                    gameId,
+                    playerAddress: account.address,
+                    guessedBot,
+                    signature
+                });
+
+            } catch (error: any) {
+                console.error(`❌ Bot vote failed for game ${gameId}:`, error.message);
+            }
+        }, voteDelay);
+    }
 });
 
 socket.on("chat_message", async (msg: any) => {
@@ -93,7 +148,7 @@ socket.on("chat_message", async (msg: any) => {
     if (msg.sender === 'bot') return;
 
     // Mark as received message so we don't auto-greet later
-    const state = gameStates.get(msg.gameId.toString()) || { hasReceivedMessage: false, hasGreeted: false };
+    const state = gameStates.get(msg.gameId.toString()) || { hasReceivedMessage: false, hasGreeted: false, hasVoted: false };
     state.hasReceivedMessage = true;
     gameStates.set(msg.gameId.toString(), state);
 
@@ -160,16 +215,22 @@ async function scanOpenGames() {
             const player2 = game[1];
             const status = Number(game[3]); // 0 = Waiting
             const stake = game[2];
+            const timestamp = Number(game[5]); // Unix timestamp when game was created
 
             // Note: isPlayer2Bot is always false on creation in current contract.
             // We skip checking it so the bot can actually join games.
             // We check if player2 is empty (0x000...) to ensure it's open.
             const isOpen = status === 0 && player2 === '0x0000000000000000000000000000000000000000';
 
-            console.log(`   > Checking Game #${i}: Status=${status}, P2=${player2}, P1=${player1}`);
+            // Check if game is old enough (15 seconds) - give humans time to match first
+            const currentTime = Math.floor(Date.now() / 1000);
+            const gameAge = currentTime - timestamp;
+            const MIN_AGE_TO_JOIN = 15; // seconds
 
-            if (isOpen && player1.toLowerCase() !== account.address.toLowerCase()) {
-                console.log(`⚡ Found Open Game #${i} | Stake: ${formatEther(stake)} MNT`);
+            console.log(`   > Checking Game #${i}: Status=${status}, Age=${gameAge}s, P1=${player1}`);
+
+            if (isOpen && player1.toLowerCase() !== account.address.toLowerCase() && gameAge >= MIN_AGE_TO_JOIN) {
+                console.log(`⚡ Found Open Game #${i} (${gameAge}s old) | Stake: ${formatEther(stake)} MNT`);
 
                 // Join Socket Room
                 socket.emit("join_game", i.toString());
@@ -186,8 +247,11 @@ async function scanOpenGames() {
                     });
                     console.log(`✅ Transaction sent: ${hash}`);
 
+                    // Track this as a bot game for voting
+                    botGames.add(i);
+
                     // Initialize Game State
-                    gameStates.set(i.toString(), { hasReceivedMessage: false, hasGreeted: false });
+                    gameStates.set(i.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });
 
                     // Schedule Proactive Greeting (e.g., 5-8 seconds after joining)
                     const greetingDelay = 5000 + Math.random() * 3000;
@@ -256,66 +320,90 @@ async function main() {
                 console.log(`\n🆕 New Game Detected: ID ${gameId}`);
                 console.log(`   Stake: ${formatEther(stake)} MNT`);
 
-                // Always try to join for now (Aggressive Bot Mode)
-                // In future, we can filter by stake or other metadata
-                console.log(`⚡ Joining Game ${gameId}...`);
+                // Random delay 8-15s before joining to normalize waiting times
+                // This prevents players from detecting AI vs Human based on timing
+                const joinDelay = 8000 + Math.random() * 7000; // 8-15 seconds
+                console.log(`⏳ Waiting ${(joinDelay / 1000).toFixed(1)}s before joining...`);
 
-                // Join the Socket.io room for this game
+                // Join the Socket.io room for this game first (so we can listen for chat)
                 socket.emit("join_game", gameId.toString());
 
-                try {
-                    // Wait a bit to avoid nonce issues if multiple events fire
-                    await new Promise(r => setTimeout(r, 2000));
+                // Schedule the actual join after delay
+                setTimeout(async () => {
+                    try {
+                        // Re-check if game is still open (human might have joined)
+                        const game = await client.readContract({
+                            address: CONTRACT_ADDRESS,
+                            abi: ABI,
+                            functionName: 'games',
+                            args: [gameId],
+                        }) as any;
 
-                    const hash = await wallet.writeContract({
-                        address: CONTRACT_ADDRESS,
-                        abi: ABI,
-                        functionName: 'joinGame',
-                        args: [gameId, true], // isBot = true
-                        value: stake
-                    });
-                    console.log(`✅ Transaction sent: ${hash}`);
+                        const player2 = game[1];
+                        const status = Number(game[3]);
+                        const isStillOpen = status === 0 && player2 === '0x0000000000000000000000000000000000000000';
 
-                    // Initialize Game State
-                    gameStates.set(gameId.toString(), { hasReceivedMessage: false, hasGreeted: false });
-
-                    // Schedule Proactive Greeting (e.g., 5-8 seconds after joining)
-                    const greetingDelay = 5000 + Math.random() * 3000;
-                    setTimeout(async () => {
-                        const state = gameStates.get(gameId.toString());
-                        if (state && !state.hasReceivedMessage && !state.hasGreeted) {
-                            console.log(`⚡ Initiating conversation for game ${gameId}...`);
-
-                            // Mark as greeted so we don't double greet
-                            state.hasGreeted = true;
-                            gameStates.set(gameId.toString(), state);
-
-                            // Emit Typing
-                            socket.emit("typing", { gameId: gameId.toString(), sender: 'bot', isTyping: true });
-
-                            // Generate Opener
-                            const opener = await generateReply("start a conversation. say something casual to the other player.");
-                            console.log(`🤖 Bot starting chat: ${opener}`);
-
-                            const typingDuration = Math.min(3000, 500 + (opener.length * 30));
-
-                            setTimeout(() => {
-                                socket.emit("typing", { gameId: gameId.toString(), sender: 'bot', isTyping: false });
-                                socket.emit("chat_message", {
-                                    gameId: gameId.toString(),
-                                    text: opener,
-                                    sender: 'bot'
-                                });
-                            }, typingDuration);
+                        if (!isStillOpen) {
+                            console.log(`🚫 Game ${gameId} already has a player. Skipping.`);
+                            return;
                         }
-                    }, greetingDelay);
 
-                } catch (error) {
-                    console.error(`❌ Failed to join game:`, error);
-                }
+                        console.log(`⚡ Now joining Game ${gameId}...`);
+
+                        const hash = await wallet.writeContract({
+                            address: CONTRACT_ADDRESS,
+                            abi: ABI,
+                            functionName: 'joinGame',
+                            args: [gameId, true], // isBot = true
+                            value: stake
+                        });
+                        console.log(`✅ Transaction sent: ${hash}`);
+
+                        // Track this as a bot game for voting
+                        botGames.add(Number(gameId));
+
+                        // Initialize Game State
+                        gameStates.set(gameId.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });
+
+                        // Schedule Proactive Greeting (e.g., 5-8 seconds after joining)
+                        const greetingDelay = 5000 + Math.random() * 3000;
+                        setTimeout(async () => {
+                            const state = gameStates.get(gameId.toString());
+                            if (state && !state.hasReceivedMessage && !state.hasGreeted) {
+                                console.log(`⚡ Initiating conversation for game ${gameId}...`);
+
+                                // Mark as greeted so we don't double greet
+                                state.hasGreeted = true;
+                                gameStates.set(gameId.toString(), state);
+
+                                // Emit Typing
+                                socket.emit("typing", { gameId: gameId.toString(), sender: 'bot', isTyping: true });
+
+                                // Generate Opener
+                                const opener = await generateReply("start a conversation. say something casual to the other player.");
+                                console.log(`🤖 Bot starting chat: ${opener}`);
+
+                                const typingDuration = Math.min(3000, 500 + (opener.length * 30));
+
+                                setTimeout(() => {
+                                    socket.emit("typing", { gameId: gameId.toString(), sender: 'bot', isTyping: false });
+                                    socket.emit("chat_message", {
+                                        gameId: gameId.toString(),
+                                        text: opener,
+                                        sender: 'bot'
+                                    });
+                                }, typingDuration);
+                            }
+                        }, greetingDelay);
+
+                    } catch (error) {
+                        console.error(`❌ Failed to join game:`, error);
+                    }
+                }, joinDelay); // End of setTimeout for delayed join
             }
         }
     });
 }
 
 main().catch(console.error);
+

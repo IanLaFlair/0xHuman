@@ -1,5 +1,6 @@
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount } from 'wagmi';
-import OxHumanABI from '../contracts/OxHumanABI.json';
+import OxHumanArtifact from '../contracts/OxHumanABI.json';
+const OxHumanABI = OxHumanArtifact.abi;
 import { parseEther } from 'viem';
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || '0x0000000000000000000000000000000000000000';
@@ -48,7 +49,8 @@ export function useSubmitVerdict() {
     const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
         useWaitForTransactionReceipt({ hash });
 
-    const submitVerdict = async (gameId: number, guessedBot: boolean) => {
+    const submitVerdict = (gameId: number, guessedBot: boolean) => {
+        console.log(`Submitting verdict for game ${gameId}...`);
         writeContract({
             address: CONTRACT_ADDRESS,
             abi: OxHumanABI,
@@ -68,7 +70,7 @@ export function useGameStatus(gameId: number) {
         functionName: 'games',
         args: [BigInt(gameId)],
         query: {
-            refetchInterval: 1000, // Poll every 1 second
+            refetchInterval: 3000, // Poll every 3 seconds (reduced from 1s to prevent 429 rate limiting)
         },
     });
 

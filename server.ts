@@ -92,7 +92,49 @@ async function resolveGame(gameId: number, p1Vote: VoteData, p2Vote: VoteData): 
 io.on("connection", (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    socket.on("join_game", (gameId) => {
+    socket.on("join_game", async (data: { gameId: string; playerAddress: string } | string) => {
+        // Handle both old format (just gameId) and new format (object with gameId and playerAddress)
+        const gameId = typeof data === 'string' ? data : data.gameId;
+        const playerAddress = typeof data === 'string' ? null : data.playerAddress;
+
+        // If playerAddress provided, validate against contract
+        if (playerAddress) {
+            try {
+                const gameData = await publicClient.readContract({
+                    address: CONTRACT_ADDRESS,
+                    abi,
+                    functionName: "games",
+                    args: [BigInt(gameId)],
+                }) as any;
+
+                const player1 = gameData[0]?.toLowerCase();
+                const player2 = gameData[1]?.toLowerCase();
+                const userAddr = playerAddress.toLowerCase();
+
+                // Check if game exists (player1 != 0x0)
+                const isValidGame = player1 !== '0x0000000000000000000000000000000000000000';
+                // Check if user is a player OR if they are the creator waiting for opponent
+                const isPlayer = userAddr === player1 || userAddr === player2;
+                // Allow creator even if player2 hasn't joined yet
+                const isCreatorWaiting = userAddr === player1 && player2 === '0x0000000000000000000000000000000000000000';
+
+                if (!isValidGame) {
+                    console.log(`❌ Game ${gameId} does not exist. Denying access.`);
+                    socket.emit("access_denied", { reason: "Game does not exist" });
+                    return;
+                }
+
+                if (!isPlayer && !isCreatorWaiting) {
+                    console.log(`❌ Address ${playerAddress} is not a player in game ${gameId}. Denying access.`);
+                    socket.emit("access_denied", { reason: "Not a player in this game" });
+                    return;
+                }
+            } catch (error: any) {
+                console.error(`Error validating player access:`, error.message);
+                // Allow access on error (fail open for UX, but log for monitoring)
+            }
+        }
+
         socket.join(gameId.toString());
         console.log(`User ${socket.id} joined game ${gameId}`);
 

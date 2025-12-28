@@ -44,6 +44,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const socketRef = useRef<Socket | null>(null);
   const [resolutionTxHash, setResolutionTxHash] = useState<string | null>(null);
   const [hasSignedVote, setHasSignedVote] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   // Derive result info from gameData
   // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted, player2GuessedBot, player2Submitted]
@@ -83,8 +84,9 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
 
     socket.on("connect", () => {
       console.log("Connected to Nervous System");
-      if (arenaId) {
-        socket.emit("join_game", arenaId);
+      if (arenaId && address) {
+        // Send wallet address for server-side validation
+        socket.emit("join_game", { gameId: arenaId, playerAddress: address });
       }
     });
 
@@ -135,6 +137,12 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     socket.on("gameResolved", (data: { gameId: number, txHash: string }) => {
         console.log("Game resolved! TX:", data.txHash);
         setResolutionTxHash(data.txHash);
+    });
+
+    // Listen for access denied from server
+    socket.on("access_denied", (data: { reason: string }) => {
+        console.error("Access denied:", data.reason);
+        setAccessDenied(true);
     });
 
     return () => {
@@ -332,6 +340,38 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
       setHasSignedVote(false);
     }
   };
+
+  // --- ACCESS DENIED VIEW ---
+  if (accessDenied) {
+    return (
+      <div className="w-full h-screen bg-background flex items-center justify-center p-4 font-mono relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+        
+        <div className="max-w-lg w-full z-10 text-center space-y-8">
+          <div className="relative w-48 h-48 mx-auto">
+            <div className="absolute inset-0 border-4 border-red-500/30 rounded-full" />
+            <div className="absolute inset-4 border-4 border-red-500 rounded-full flex items-center justify-center">
+              <AlertOctagon className="w-16 h-16 text-red-500" />
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <h1 className="text-3xl md:text-4xl font-bold text-red-500">ACCESS DENIED</h1>
+            <p className="text-gray-400">
+              You are not a participant in this game. Only the players can access this room.
+            </p>
+          </div>
+          
+          <button 
+            onClick={() => router.push('/arena')}
+            className="bg-primary text-black font-bold py-4 px-8 rounded hover:bg-blue-400 transition-all"
+          >
+            RETURN TO ARENA
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // --- MATCHMAKING VIEW ---
   if (gameState === 'searching') {

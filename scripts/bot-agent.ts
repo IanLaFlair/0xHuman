@@ -215,7 +215,7 @@ socket.on("chat_message", async (msg: any) => {
         console.log(`📌 Tracking game ${gameIdNum} as bot game (received message)`);
         botGames.add(gameIdNum);
         // Also join the socket room to receive vote events
-        socket.emit("join_game", msg.gameId.toString());
+        socket.emit("join_game", { gameId: msg.gameId.toString(), playerAddress: account.address });
     }
 
     // Initialize game state if not exists
@@ -308,10 +308,7 @@ async function scanOpenGames() {
             if (isOpen && player1.toLowerCase() !== account.address.toLowerCase() && gameAge >= MIN_AGE_TO_JOIN) {
                 console.log(`⚡ Found Open Game #${i} (${gameAge}s old) | Stake: ${formatEther(stake)} MNT`);
 
-                // Join Socket Room
-                socket.emit("join_game", i.toString());
-
-                // Join Contract
+                // Join Contract FIRST (so we become a player before joining socket room)
                 console.log(`   Joining Game #${i}...`);
                 try {
                     const nonce = await getNonce();
@@ -325,8 +322,16 @@ async function scanOpenGames() {
                     });
                     console.log(`✅ Transaction sent: ${hash}`);
 
+                    // Wait for transaction to be confirmed before joining socket
+                    console.log(`   ⏳ Waiting for confirmation...`);
+                    await client.waitForTransactionReceipt({ hash });
+                    console.log(`   ✅ Transaction confirmed!`);
+
                     // Track this as a bot game for voting
                     botGames.add(i);
+
+                    // Now join Socket Room AFTER we're confirmed as player on-chain
+                    socket.emit("join_game", { gameId: i.toString(), playerAddress: account.address });
 
                     // Initialize Game State
                     gameStates.set(i.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });
@@ -404,10 +409,7 @@ async function main() {
                 const joinDelay = 8000 + Math.random() * 7000; // 8-15 seconds
                 console.log(`⏳ Waiting ${(joinDelay / 1000).toFixed(1)}s before joining...`);
 
-                // Join the Socket.io room for this game first (so we can listen for chat)
-                socket.emit("join_game", gameId.toString());
-
-                // Schedule the actual join after delay
+                // Schedule the actual join after delay (join on-chain FIRST, then socket)
                 setTimeout(async () => {
                     try {
                         // Re-check if game is still open (human might have joined)
@@ -440,8 +442,16 @@ async function main() {
                         });
                         console.log(`✅ Transaction sent: ${hash}`);
 
+                        // Wait for transaction to be confirmed before joining socket
+                        console.log(`   ⏳ Waiting for confirmation...`);
+                        await client.waitForTransactionReceipt({ hash });
+                        console.log(`   ✅ Transaction confirmed!`);
+
                         // Track this as a bot game for voting
                         botGames.add(Number(gameId));
+
+                        // Now join Socket Room AFTER we're confirmed as player on-chain
+                        socket.emit("join_game", { gameId: gameId.toString(), playerAddress: account.address });
 
                         // Initialize Game State
                         gameStates.set(gameId.toString(), { hasReceivedMessage: false, hasGreeted: false, hasVoted: false });

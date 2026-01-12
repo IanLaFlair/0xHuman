@@ -37,6 +37,15 @@ export default function DocsSidebar({ sidebar }: { sidebar: SidebarSection[] }) 
         bg-black border-r border-gray-800 p-6 flex-shrink-0 overflow-y-auto transition-transform duration-300 z-20
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
+        {/* Back to main site */}
+        <Link 
+          href="/" 
+          className="hidden md:flex items-center gap-2 text-xs text-gray-500 hover:text-primary transition-colors mb-6"
+        >
+          <span>←</span>
+          <span>Back to 0xHuman</span>
+        </Link>
+
         <div className="mb-8 hidden md:block">
           <h2 className="text-xl font-bold text-primary tracking-wider mb-2">DOCS</h2>
           <div className="h-0.5 w-12 bg-primary"></div>

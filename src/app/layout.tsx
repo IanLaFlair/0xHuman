@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import PageTransition from "@/components/PageTransition";
+import "@/lib/logger"; // Initialize console suppression for production
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

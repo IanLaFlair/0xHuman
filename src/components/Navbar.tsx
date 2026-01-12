@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Terminal, Wifi, Menu, X, User, LogOut } from 'lucide-react';
 import CustomConnectButton from './CustomConnectButton';
@@ -20,8 +21,13 @@ export default function Navbar() {
   return (
     <nav className="flex justify-between items-center p-6 border-b border-muted/50 backdrop-blur-sm z-50 relative">
       <div className="flex items-center gap-2">
-        <div className="bg-primary p-1 rounded-sm">
-          <Terminal className="w-5 h-5 text-black" />
+        <div className="relative w-8 h-8">
+          <Image 
+            src="/icon.png" 
+            alt="0xHuman Logo" 
+            fill
+            className="object-cover"
+          />
         </div>
         <span className="font-bold text-xl tracking-wider text-white">0XHUMAN // TERMINAL</span>
       </div>

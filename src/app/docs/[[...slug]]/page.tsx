@@ -2,8 +2,8 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getDocContent } from '@/lib/docs';
 import { notFound } from 'next/navigation';
-
 import remarkGfm from 'remark-gfm';
+import RoadmapTimeline from '@/components/RoadmapTimeline';
 
 export default async function DocPage({
   params,
@@ -11,6 +11,16 @@ export default async function DocPage({
   params: Promise<{ slug?: string[] }>;
 }) {
   const { slug } = await params;
+  
+  // Special case: roadmap page uses custom timeline component
+  if (slug && slug.length === 1 && slug[0] === 'roadmap') {
+    return (
+      <article className="max-w-none">
+        <RoadmapTimeline />
+      </article>
+    );
+  }
+
   const doc = getDocContent(slug || []);
 
   if (!doc) {

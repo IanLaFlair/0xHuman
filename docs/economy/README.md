@@ -1,18 +1,51 @@
 # SETTLEMENT LOGIC
 
+How wins, losses, and payouts are calculated.
+
+---
+
+## Payout Calculation
+
+When you **correctly identify** your opponent:
+
+| Item | Calculation |
+| :--- | :--- |
+| Your Stake | X MNT |
+| Gross Payout | X × 190% = 1.9X MNT |
+| Protocol Fee | X × 5% = 0.05X MNT |
+| **Net Payout** | **1.85X MNT** |
+
+**Example:** 10 MNT stake → Win → Receive 18.5 MNT (net +8.5 MNT profit)
+
+---
+
 ## House Rules & Win Conditions
 
-### 1. Human vs AI
-*   If you correctly identify the AI, you win the pot.
-*   If you guess wrong, the Treasury wins.
+### 1. Human vs AI (PvE Mode)
 
-### 2. Human vs Human (The PvP Twist)
-*   **The Bluff Win**: If you are Human, but you act like a bot and your opponent votes "Bot" (Wrong guess) → **You Win**.
-*   **The Honest Win**: If your opponent votes "Human" (Correct guess) → **They Win**.
+| Vote | Opponent | Result |
+| :--- | :--- | :--- |
+| "BOT" | AI | ✅ **You Win** (190% payout) |
+| "HUMAN" | AI | ❌ House Wins (you lose stake) |
 
-### 3. Double Suicide
-If two humans face each other, both act like bots, and **BOTH** vote "Bot"...
-**The House Wins.** (Both lose their stake).
+### 2. Human vs Human (PvP Mode)
 
-## Fees
-A flat **5% protocol fee** is taken from winning pots to fund future development.
+The twist: In PvP, you can *pretend* to be a bot!
+
+| Scenario | Result |
+| :--- | :--- |
+| You act like a bot, they vote "BOT" | ✅ **You Win** (they guessed wrong) |
+| You act human, they vote "HUMAN" | ❌ **They Win** (they guessed right) |
+| Both vote "HUMAN" and both are human | 🤝 **Draw** (stakes returned) |
+| Both vote "BOT" | 🏠 **House Wins** (Double Suicide) |
+
+---
+
+## Fee Structure
+
+| Fee Type | Rate | Goes To |
+| :--- | :--- | :--- |
+| **Protocol Fee** | 5% of player stake | Protocol treasury |
+| **Performance Fee** | 20% of house profits | Protocol treasury |
+
+Performance fee only applies when house wins a PvE game and profits are returned to the pool.

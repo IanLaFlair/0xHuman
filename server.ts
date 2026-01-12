@@ -225,11 +225,11 @@ async function _resolveGame(gameId: number, p1Vote: VoteData, p2Vote: VoteData):
 
             // Award to both players and record match history
             const p1Exp = await awardGameExp(player1, p1Won, stakeNumber);
-            await recordMatch(gameId.toString(), player1, player2, stakeNumber, p1Won, p1Exp, p1Won ? payout : 0);
+            await recordMatch(gameId, player1, player2, stakeNumber, p1Won, p1Exp, p1Won ? payout : 0);
 
             if (player2 !== "0x0000000000000000000000000000000000000000") {
                 const p2Exp = await awardGameExp(player2, p2Won, stakeNumber);
-                await recordMatch(gameId.toString(), player2, player1, stakeNumber, p2Won, p2Exp, p2Won ? payout : 0);
+                await recordMatch(gameId, player2, player1, stakeNumber, p2Won, p2Exp, p2Won ? payout : 0);
             }
 
             console.log(`🎮 0xP awarded for game ${gameId}!`);

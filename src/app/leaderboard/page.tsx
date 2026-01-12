@@ -29,7 +29,32 @@ export default function LeaderboardPage() {
 
       <Navbar />
 
-      <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-8 flex-1 flex flex-col">
+      {/* Coming Soon Overlay */}
+      <div className="absolute inset-0 z-40 flex items-start justify-center pt-20 bg-black/60 backdrop-blur-sm">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-20 h-20 bg-primary/20 rounded-2xl flex items-center justify-center border border-primary/30 mx-auto mb-6">
+            <Trophy className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-3xl font-bold mb-3">LEADERBOARD</h2>
+          <p className="text-xl text-primary font-semibold mb-4">Coming Soon</p>
+          <p className="text-gray-400 text-sm leading-relaxed mb-6">
+            Global rankings for the most successful Turing Test agents and hunters.
+            Compete for the top spot and earn exclusive rewards.
+          </p>
+          <div className="bg-gray-900/80 border border-gray-700 rounded-lg p-4 text-left">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Features</p>
+            <ul className="text-sm text-gray-300 space-y-1">
+              <li>• Global Rankings</li>
+              <li>• Weekly & Monthly Tournaments</li>
+              <li>• Player Profiles & Stats</li>
+              <li>• Hall of Fame</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Blurred Content Behind */}
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-8 py-8 flex-1 flex flex-col blur-sm opacity-50 pointer-events-none">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
           <div>
@@ -154,7 +179,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-primary/30 bg-black/50 backdrop-blur-md p-4">
+      <div className="border-t border-primary/30 bg-black/50 backdrop-blur-md p-4 blur-sm opacity-50 pointer-events-none">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-primary/20 rounded border border-primary/50 flex items-center justify-center">

@@ -1,16 +1,21 @@
 'use client';
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useDisconnect } from 'wagmi';
+import { useDisconnect, useSwitchChain, useChainId } from 'wagmi';
 import { User, LogOut, ChevronDown, Wallet } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { mantleSepoliaTestnet, mantle } from 'wagmi/chains';
 
 export default function CustomConnectButton() {
   const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
+  const chainId = useChainId();
   const [isOpen, setIsOpen] = useState(false);
+  const [isNetworkOpen, setIsNetworkOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const networkRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -18,12 +23,15 @@ export default function CustomConnectButton() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
+      if (networkRef.current && !networkRef.current.contains(event.target as Node)) {
+        setIsNetworkOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [dropdownRef]);
+  }, [dropdownRef, networkRef]);
 
   return (
     <ConnectButton.Custom>
@@ -81,33 +89,81 @@ export default function CustomConnectButton() {
 
               return (
                 <div className="flex items-center gap-4">
-                  {/* Network Pill */}
-                  <button
-                    onClick={openChainModal}
-                    className="hidden md:flex items-center gap-2 h-10 bg-secondary/30 border border-muted text-gray-400 px-3 rounded hover:text-white hover:border-gray-500 transition-colors text-xs font-bold tracking-wider"
-                  >
-                    {chain.hasIcon && (
-                      <div
-                        style={{
-                          background: chain.iconBackground,
-                          width: 16,
-                          height: 16,
-                          borderRadius: 999,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {chain.iconUrl && (
-                          <img
-                            alt={chain.name ?? 'Chain icon'}
-                            src={chain.iconUrl}
-                            style={{ width: 16, height: 16 }}
-                          />
-                        )}
+                  {/* Custom Network Switcher */}
+                  <div className="relative hidden md:block" ref={networkRef}>
+                    <button
+                      onClick={() => setIsNetworkOpen(!isNetworkOpen)}
+                      className="flex items-center gap-2 h-10 bg-secondary/30 border border-muted text-gray-400 px-3 rounded hover:text-white hover:border-gray-500 transition-colors text-xs font-bold tracking-wider"
+                    >
+                      {chain.hasIcon && (
+                        <div
+                          style={{
+                            background: chain.iconBackground,
+                            width: 16,
+                            height: 16,
+                            borderRadius: 999,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {chain.iconUrl && (
+                            <img
+                              alt={chain.name ?? 'Chain icon'}
+                              src={chain.iconUrl}
+                              style={{ width: 16, height: 16 }}
+                            />
+                          )}
+                        </div>
+                      )}
+                      {chain.name}
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    
+                    {/* Network Dropdown */}
+                    {isNetworkOpen && (
+                      <div className="absolute left-0 mt-2 w-64 bg-black/95 backdrop-blur-md border border-gray-800 rounded-lg shadow-2xl overflow-hidden z-50">
+                        <div className="px-4 py-3 border-b border-gray-800">
+                          <p className="text-xs font-bold text-white">Switch Networks</p>
+                        </div>
+                        
+                        {/* Mantle Mainnet - Coming Soon */}
+                        <div className="flex items-center justify-between px-4 py-3 opacity-50 cursor-not-allowed">
+                          <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
+                              <img src="https://assets.coingecko.com/coins/images/30980/small/token-logo.png" alt="Mantle" className="w-5 h-5" />
+                            </div>
+                            <span className="text-sm text-gray-400">Mantle</span>
+                          </div>
+                          <span className="text-[10px] text-yellow-500 font-bold px-2 py-0.5 bg-yellow-500/10 rounded">COMING SOON</span>
+                        </div>
+                        
+                        {/* Mantle Sepolia Testnet - Active */}
+                        <button
+                          onClick={() => {
+                            if (chainId !== mantleSepoliaTestnet.id) {
+                              switchChain({ chainId: mantleSepoliaTestnet.id });
+                            }
+                            setIsNetworkOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors ${chainId === mantleSepoliaTestnet.id ? 'bg-primary/10' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
+                              <img src="https://assets.coingecko.com/coins/images/30980/small/token-logo.png" alt="Mantle Sepolia" className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm text-white">Mantle Sepolia</span>
+                              <span className="text-[10px] text-gray-500">(Testnet)</span>
+                            </div>
+                          </div>
+                          {chainId === mantleSepoliaTestnet.id && (
+                            <span className="text-[10px] text-green-500 font-bold px-2 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
+                              Connected <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                            </span>
+                          )}
+                        </button>
                       </div>
                     )}
-                    {chain.name}
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
+                  </div>
 
                   {/* Balance Display */}
                   <div className="hidden md:flex items-center gap-3 h-10 px-4 rounded border border-primary/30 bg-primary/5 text-white font-mono text-sm font-bold shadow-[0_0_10px_rgba(59,130,246,0.1)]">

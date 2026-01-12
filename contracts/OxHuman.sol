@@ -4,8 +4,17 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
+// Interface for HouseVault
+interface IHouseVault {
+    function recordWin() external payable; // Now payable - receives MNT
+    function recordLoss(uint256 amount) external returns (bool);
+    function canCoverBet(uint256 amount) external view returns (bool);
+    function maxBet() external view returns (uint256);
+}
+
 contract OxHuman {
     enum GameStatus { Open, Active, Resolved }
+    enum GameMode { PvP, PvE } // NEW: Game mode enum
     enum Role { Human, Bot }
 
     struct Game {
@@ -13,6 +22,7 @@ contract OxHuman {
         address player2;
         uint256 stake;
         GameStatus status;
+        GameMode mode; // NEW: PvP or PvE
         address winner;
         uint256 timestamp;
         bool isPlayer2Bot; // True if P2 is a bot, false if human
@@ -29,6 +39,12 @@ contract OxHuman {
     uint256 public gameCount;
     address public oracle;
     address public resolver; // Server wallet for signed vote resolution
+    IHouseVault public houseVault; // NEW: HouseVault contract
+    
+    uint256 public constant PAYOUT_NUMERATOR = 190; // 1.9x payout
+    uint256 public constant PAYOUT_DENOMINATOR = 100;
+    uint256 public constant FEE_PERCENT = 5; // 5% fee
+    uint256 public constant PERFORMANCE_FEE = 20; // 20% of house wins
 
     event GameCreated(uint256 indexed gameId, address player1, uint256 stake);
     event GameJoined(uint256 indexed gameId, address player2);
@@ -56,6 +72,13 @@ contract OxHuman {
         resolver = _resolver;
     }
 
+    // NEW: Set HouseVault address
+    function setHouseVault(address _houseVault) external onlyOracle {
+        require(_houseVault != address(0), "Invalid address");
+        houseVault = IHouseVault(_houseVault);
+    }
+
+    // Original PvP game creation
     function createGame() external payable {
         require(msg.value > 0, "Stake required");
         
@@ -64,6 +87,7 @@ contract OxHuman {
             player2: address(0),
             stake: msg.value,
             status: GameStatus.Open,
+            mode: GameMode.PvP,
             winner: address(0),
             timestamp: block.timestamp,
             isPlayer2Bot: false,
@@ -74,6 +98,34 @@ contract OxHuman {
         });
 
         emit GameCreated(gameCount, msg.sender, msg.value);
+        gameCount++;
+    }
+
+    // NEW: Create PvE game (instant match vs House)
+    function createGamePvE() external payable {
+        require(msg.value > 0, "Stake required");
+        require(address(houseVault) != address(0), "HouseVault not set");
+        require(houseVault.canCoverBet(msg.value), "Bet exceeds pool capacity");
+        
+        uint256 currentGameId = gameCount;
+        
+        games[currentGameId] = Game({
+            player1: msg.sender,
+            player2: address(houseVault), // House is P2
+            stake: msg.value,
+            status: GameStatus.Active, // Immediately active
+            mode: GameMode.PvE,
+            winner: address(0),
+            timestamp: block.timestamp,
+            isPlayer2Bot: true, // House acts as bot
+            player1GuessedBot: false,
+            player1Submitted: false,
+            player2GuessedBot: false,
+            player2Submitted: false
+        });
+
+        emit GameCreated(currentGameId, msg.sender, msg.value);
+        emit GameJoined(currentGameId, address(houseVault));
         gameCount++;
     }
 
@@ -91,6 +143,27 @@ contract OxHuman {
         game.timestamp = block.timestamp;
 
         emit GameJoined(_gameId, msg.sender);
+    }
+
+    // NEW: Resolver/Bot joins game using HouseVault funds (converts PvP to PvE)
+    function joinGameAsHouse(uint256 _gameId) external onlyResolver {
+        Game storage game = games[_gameId];
+        require(game.status == GameStatus.Open, "Game not open");
+        require(address(houseVault) != address(0), "HouseVault not set");
+        require(houseVault.canCoverBet(game.stake), "Bet exceeds pool capacity");
+        
+        // Request stake from HouseVault
+        bool funded = houseVault.recordLoss(game.stake);
+        require(funded, "HouseVault funding failed");
+        
+        // Convert to PvE mode
+        game.player2 = address(houseVault);
+        game.isPlayer2Bot = true;
+        game.mode = GameMode.PvE;
+        game.status = GameStatus.Active;
+        game.timestamp = block.timestamp;
+        
+        emit GameJoined(_gameId, address(houseVault));
     }
 
     // Both players can submit verdict
@@ -119,25 +192,71 @@ contract OxHuman {
     function _tryResolve(uint256 _gameId) internal {
         Game storage game = games[_gameId];
         
-        // If P2 is a bot, resolve immediately when P1 submits (original behavior)
-        if (game.isPlayer2Bot && game.player1Submitted) {
+        // PvE mode - resolve when P1 submits
+        if (game.mode == GameMode.PvE && game.player1Submitted) {
+            _resolveVsHouse(_gameId);
+            return;
+        }
+        
+        // Old Bot mode (backward compatible) - resolve when P1 submits
+        if (game.mode == GameMode.PvP && game.isPlayer2Bot && game.player1Submitted) {
             _resolveVsBot(_gameId);
             return;
         }
         
-        // For PvP, wait for both players to submit
-        if (!game.isPlayer2Bot && game.player1Submitted && game.player2Submitted) {
+        // For PvP (human vs human), wait for both players to submit
+        if (game.mode == GameMode.PvP && !game.isPlayer2Bot && game.player1Submitted && game.player2Submitted) {
             _resolveVsHuman(_gameId);
         }
     }
 
-    // Original logic: P1 vs Bot
+    // NEW: P1 vs House (PvE mode with HouseVault)
+    function _resolveVsHouse(uint256 _gameId) internal {
+        Game storage game = games[_gameId];
+        
+        // In PvE, player is always guessing if opponent is bot (they are!)
+        // Correct guess = player wins, wrong guess = house wins
+        bool playerWins = game.player1GuessedBot; // True = guessed bot = CORRECT
+        
+        uint256 playerStake = game.stake;
+        uint256 fee = playerStake * FEE_PERCENT / 100; // 5% protocol fee
+        
+        if (playerWins) {
+            // Player wins - House pays out 1.9x
+            uint256 payout = (playerStake * PAYOUT_NUMERATOR) / PAYOUT_DENOMINATOR;
+            uint256 houseLoss = payout - playerStake; // Amount house pays from pool
+            
+            // House pays the player
+            houseVault.recordLoss(houseLoss);
+            winnings[game.player1] += payout - fee;
+            game.winner = game.player1;
+            
+            payable(oracle).transfer(fee);
+        } else {
+            // House wins - gets back original stake + player's stake (minus fees)
+            uint256 houseStake = playerStake; // House matched player's stake
+            uint256 houseProfit = playerStake - fee; // Profit from player's stake
+            uint256 performanceFee = houseProfit * PERFORMANCE_FEE / 100; // 20% performance fee on profit
+            
+            // Return house's original stake + net profit to HouseVault
+            uint256 totalReturn = houseStake + (houseProfit - performanceFee);
+            houseVault.recordWin{value: totalReturn}();
+            game.winner = address(houseVault);
+            
+            payable(oracle).transfer(fee + performanceFee);
+        }
+        
+        game.status = GameStatus.Resolved;
+        emit GameResolved(_gameId, game.winner, playerWins ? game.stake : 0);
+    }
+
+    // Original logic: P1 vs Bot (legacy, for backward compatibility)
     function _resolveVsBot(uint256 _gameId) internal {
         Game storage game = games[_gameId];
         
         bool correctGuess = (game.player1GuessedBot == game.isPlayer2Bot);
         uint256 totalPot = game.stake * 2;
-        uint256 fee = totalPot * 5 / 100; // 5% fee
+        uint256 fee = totalPot * FEE_PERCENT / 100; // 5% fee
         uint256 payout = totalPot - fee;
 
         if (correctGuess) {
@@ -263,17 +382,21 @@ contract OxHuman {
         require(game.status == GameStatus.Active, "Game not active");
         require(!game.player1Submitted && !game.player2Submitted, "Already voted on-chain");
         
-        // Create message hashes that players signed
-        // Message format: keccak256(gameId, guessedBot, "VOTE")
-        bytes32 p1Hash = keccak256(abi.encodePacked(_gameId, _p1GuessedBot, "VOTE"));
-        bytes32 p1EthHash = MessageHashUtils.toEthSignedMessageHash(p1Hash);
-        address p1Signer = ECDSA.recover(p1EthHash, _p1Signature);
-        require(p1Signer == game.player1, "Invalid P1 signature");
+        // Verify P1 signature
+        require(
+            ECDSA.recover(
+                MessageHashUtils.toEthSignedMessageHash(keccak256(abi.encodePacked(_gameId, _p1GuessedBot, "VOTE"))),
+                _p1Signature
+            ) == game.player1,
+            "Invalid P1 signature"
+        );
         
-        bytes32 p2Hash = keccak256(abi.encodePacked(_gameId, _p2GuessedBot, "VOTE"));
-        bytes32 p2EthHash = MessageHashUtils.toEthSignedMessageHash(p2Hash);
-        address p2Signer = ECDSA.recover(p2EthHash, _p2Signature);
-        require(p2Signer == game.player2, "Invalid P2 signature");
+        // Verify P2 signature - allow resolver for PvE games (contracts can't sign)
+        address p2Signer = ECDSA.recover(
+            MessageHashUtils.toEthSignedMessageHash(keccak256(abi.encodePacked(_gameId, _p2GuessedBot, "VOTE"))),
+            _p2Signature
+        );
+        require(p2Signer == game.player2 || (game.mode == GameMode.PvE && p2Signer == resolver), "Invalid P2 signature");
         
         // Record votes
         game.player1GuessedBot = _p1GuessedBot;
@@ -284,11 +407,16 @@ contract OxHuman {
         emit VerdictSubmitted(_gameId, game.player1, _p1GuessedBot);
         emit VerdictSubmitted(_gameId, game.player2, _p2GuessedBot);
         
-        // Resolve based on game type
-        if (game.isPlayer2Bot) {
-            _resolveVsBot(_gameId);
+        // Resolve based on game mode
+        if (game.mode == GameMode.PvE) {
+            _resolveVsHouse(_gameId);  // PvE: Uses HouseVault
+        } else if (game.isPlayer2Bot) {
+            _resolveVsBot(_gameId);    // Legacy: P1 vs assigned bot
         } else {
-            _resolveVsHuman(_gameId);
+            _resolveVsHuman(_gameId);  // PvP: Human vs Human
         }
     }
+
+    // Receive MNT from HouseVault
+    receive() external payable {}
 }

@@ -1,8 +1,9 @@
 'use client';
 
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
+import { parseEther, formatEther } from 'viem';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2, Users, Zap, Trophy, Shield, Terminal, ArrowRight, Swords } from 'lucide-react';
 import Navbar from '@/components/Navbar';
@@ -11,9 +12,15 @@ import { decodeEventLog } from 'viem';
 import OxHumanArtifact from '@/contracts/OxHumanABI.json';
 const OxHumanABI = OxHumanArtifact.abi;
 
+const HOUSE_VAULT_ADDRESS = process.env.NEXT_PUBLIC_HOUSE_VAULT_ADDRESS as `0x${string}`;
+const HOUSE_VAULT_ABI = [
+  { name: 'maxBet', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }
+] as const;
+
 export default function ArenaPage() {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
   const [targetGameId, setTargetGameId] = useState<number | null>(null);
@@ -21,6 +28,19 @@ export default function ArenaPage() {
   const { createGame, isPending: isCreating, isConfirming: isConfirmingCreate, isConfirmed: isCreated, hash: createHash, receipt: createReceipt } = useCreateGame();
   const { joinGame, isPending: isJoining, isConfirming: isConfirmingJoin, isConfirmed: isJoined, hash: joinHash } = useJoinGame();
   const { findMatch } = useFindMatch();
+
+  // Fetch maxBet from HouseVault to check pool capacity
+  const { data: maxBetRaw } = useReadContract({
+    address: HOUSE_VAULT_ADDRESS,
+    abi: HOUSE_VAULT_ABI,
+    functionName: 'maxBet',
+  });
+  const maxBet = maxBetRaw ? Number(formatEther(maxBetRaw)) : 0;
+
+  // Helper to check if arena is available
+  const isArenaAvailable = (stake: string) => {
+    return Number(stake) <= maxBet;
+  };
 
 
   // Combine loading states
@@ -31,7 +51,33 @@ export default function ArenaPage() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Capture referral from URL
+    const ref = searchParams.get('ref');
+    if (ref) {
+      localStorage.setItem('0xhuman_referrer', ref);
+      console.log(`📎 Referral captured: ${ref}`);
+    }
+  }, [searchParams]);
+
+  // Register referrer when wallet connects
+  useEffect(() => {
+    if (address && isConnected) {
+      const referrer = localStorage.getItem('0xhuman_referrer');
+      if (referrer && referrer !== address.slice(0, 8)) {
+        // Register this user as referred
+        fetch(`http://localhost:3001/api/register-referral`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ referrer, referred: address })
+        }).then(() => {
+          console.log(`✅ Registered as referred by ${referrer}`);
+          // Clear after registration to prevent re-registering
+          localStorage.removeItem('0xhuman_referrer');
+        }).catch(console.error);
+      }
+    }
+  }, [address, isConnected]);
 
   useEffect(() => {
     if (isConfirmed && hash) {
@@ -107,9 +153,9 @@ export default function ArenaPage() {
     {
       id: 'hightable',
       title: 'HIGH TABLE',
-      stake: '100',
+      stake: '30',
       label: 'ELITE',
-      features: ['Maximum Risk', 'Elite Only', 'High Reward'],
+      features: ['Higher Risk', 'Skilled Players', 'Better Rewards'],
       color: 'border-red-900',
       hover: 'hover:border-red-700',
       icon: <Trophy className="w-5 h-5" />
@@ -185,14 +231,18 @@ export default function ArenaPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {arenas.map((arena) => (
+          {arenas.map((arena) => {
+            const available = isArenaAvailable(arena.stake);
+            return (
             <div 
               key={arena.id}
-              onClick={() => setSelectedArena(arena.id)}
-              className={`relative group rounded-lg border-2 bg-secondary/50 p-6 transition-all duration-300 cursor-pointer ${
-                selectedArena === arena.id 
-                  ? `${arena.color} bg-secondary shadow-[0_0_20px_rgba(59,130,246,0.2)] scale-[1.02]` 
-                  : `border-muted bg-secondary/30 hover:bg-secondary/50 ${arena.hover}`
+              onClick={() => available && setSelectedArena(arena.id)}
+              className={`relative group rounded-lg border-2 bg-secondary/50 p-6 transition-all duration-300 ${
+                !available 
+                  ? 'opacity-50 cursor-not-allowed border-gray-800'
+                  : selectedArena === arena.id 
+                    ? `${arena.color} bg-secondary shadow-[0_0_20px_rgba(59,130,246,0.2)] scale-[1.02] cursor-pointer` 
+                    : `border-muted bg-secondary/30 hover:bg-secondary/50 ${arena.hover} cursor-pointer`
               }`}
             >
               {arena.recommended && (
@@ -239,15 +289,29 @@ export default function ArenaPage() {
                 ))}
               </div>
 
+              {/* Pool capacity warning */}
+              {!available && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg z-10">
+                  <div className="text-center p-4">
+                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ POOL INSUFFICIENT</div>
+                    <div className="text-gray-400 text-[10px]">Max bet: {maxBet.toFixed(1)} MNT</div>
+                  </div>
+                </div>
+              )}
+
               <button className={`w-full py-3 rounded text-sm font-bold tracking-wider transition-all flex items-center justify-center gap-2 ${
-                selectedArena === arena.id
-                  ? 'bg-white text-black'
-                  : 'bg-muted text-gray-400 group-hover:bg-muted/80'
-              }`}>
-                {selectedArena === arena.id ? 'SELECTED' : `SELECT LINK [${arena.id === 'playground' ? '1' : arena.id === 'pit' ? '2' : '3'}]`}
+                !available
+                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                  : selectedArena === arena.id
+                    ? 'bg-white text-black'
+                    : 'bg-muted text-gray-400 group-hover:bg-muted/80'
+              }`}
+              disabled={!available}
+              >
+                {!available ? 'UNAVAILABLE' : selectedArena === arena.id ? 'SELECTED' : `SELECT LINK [${arena.id === 'playground' ? '1' : arena.id === 'pit' ? '2' : '3'}]`}
               </button>
             </div>
-          ))}
+          )})}
         </div>
 
         {/* Bottom Action Bar */}

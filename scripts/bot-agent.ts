@@ -70,12 +70,11 @@ const ABI = [
     },
     {
         "inputs": [
-            { "internalType": "uint256", "name": "gameId", "type": "uint256" },
-            { "internalType": "bool", "name": "isBot", "type": "bool" }
+            { "internalType": "uint256", "name": "_gameId", "type": "uint256" }
         ],
-        "name": "joinGame",
+        "name": "joinGameAsHouse",
         "outputs": [],
-        "stateMutability": "payable",
+        "stateMutability": "nonpayable",
         "type": "function"
     },
     {
@@ -93,11 +92,14 @@ const ABI = [
             { "internalType": "address", "name": "player2", "type": "address" },
             { "internalType": "uint256", "name": "stake", "type": "uint256" },
             { "internalType": "uint8", "name": "status", "type": "uint8" },
+            { "internalType": "uint8", "name": "mode", "type": "uint8" },
             { "internalType": "address", "name": "winner", "type": "address" },
             { "internalType": "uint256", "name": "timestamp", "type": "uint256" },
             { "internalType": "bool", "name": "isPlayer2Bot", "type": "bool" },
             { "internalType": "bool", "name": "player1GuessedBot", "type": "bool" },
-            { "internalType": "bool", "name": "player1Submitted", "type": "bool" }
+            { "internalType": "bool", "name": "player1Submitted", "type": "bool" },
+            { "internalType": "bool", "name": "player2GuessedBot", "type": "bool" },
+            { "internalType": "bool", "name": "player2Submitted", "type": "bool" }
         ],
         "stateMutability": "view",
         "type": "function"
@@ -286,12 +288,12 @@ async function scanOpenGames() {
                 args: [BigInt(i)],
             }) as any;
 
-            // Game Struct: [player1, player2, stake, status, ...]
+            // Game Struct: [player1, player2, stake, status, mode, winner, timestamp, ...]
             const player1 = game[0];
             const player2 = game[1];
             const status = Number(game[3]); // 0 = Waiting
             const stake = game[2];
-            const timestamp = Number(game[5]); // Unix timestamp when game was created
+            const timestamp = Number(game[6]); // Unix timestamp when game was created (index 6 now)
 
             // Note: isPlayer2Bot is always false on creation in current contract.
             // We skip checking it so the bot can actually join games.
@@ -315,9 +317,8 @@ async function scanOpenGames() {
                     const hash = await wallet.writeContract({
                         address: CONTRACT_ADDRESS,
                         abi: ABI,
-                        functionName: 'joinGame',
-                        args: [BigInt(i), true], // isBot = true
-                        value: stake,
+                        functionName: 'joinGameAsHouse',
+                        args: [BigInt(i)], // Only gameId needed, HouseVault provides stake
                         nonce
                     });
                     console.log(`✅ Transaction sent: ${hash}`);

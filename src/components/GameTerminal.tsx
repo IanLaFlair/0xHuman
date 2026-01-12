@@ -47,21 +47,22 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [accessDenied, setAccessDenied] = useState(false);
 
   // Derive result info from gameData
-  // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted, player2GuessedBot, player2Submitted]
+  // gameData: [player1, player2, stake, status, MODE, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted, player2GuessedBot, player2Submitted]
   const player1Address = gameData ? (gameData as any)[0] : null;
   const player2Address = gameData ? (gameData as any)[1] : null;
   const isPlayer1 = address && player1Address && address.toLowerCase() === player1Address.toLowerCase();
   const isPlayer2 = address && player2Address && address.toLowerCase() === player2Address.toLowerCase();
   
-  const isPlayer2Bot = gameData ? Boolean((gameData as any)[6]) : false;
-  const player1GuessedBot = gameData ? Boolean((gameData as any)[7]) : false;
-  const player1Submitted = gameData ? Boolean((gameData as any)[8]) : false;
-  const player2GuessedBot = gameData ? Boolean((gameData as any)[9]) : false;
-  const player2Submitted = gameData ? Boolean((gameData as any)[10]) : false;
+  // Index shifted by 1 after mode was added at index 4
+  const isPlayer2Bot = gameData ? Boolean((gameData as any)[7]) : false;
+  const player1GuessedBot = gameData ? Boolean((gameData as any)[8]) : false;
+  const player1Submitted = gameData ? Boolean((gameData as any)[9]) : false;
+  const player2GuessedBot = gameData ? Boolean((gameData as any)[10]) : false;
+  const player2Submitted = gameData ? Boolean((gameData as any)[11]) : false;
   
-  const winner = gameData ? (gameData as any)[4] : null;
+  const winner = gameData ? (gameData as any)[5] : null; // Was 4, now 5 after mode
   const isDraw = winner === '0x0000000000000000000000000000000000000000';
-  const isWinner = winner && address && winner.toLowerCase() === address.toLowerCase();
+  const isWinner = winner && address && typeof winner === 'string' && winner.toLowerCase() === address.toLowerCase();
   
   // For result display
   const myGuessedBot = isPlayer1 ? player1GuessedBot : player2GuessedBot;
@@ -711,6 +712,20 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                      {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
                    </div>
                  </div>
+               </div>
+
+               {/* 0xP Earned */}
+               <div className="bg-primary/10 border border-primary/30 p-4 rounded-lg">
+                 <div className="flex items-center justify-between">
+                   <div>
+                     <div className="text-primary text-xs uppercase tracking-widest mb-1">0xP Earned</div>
+                     <div className="text-xl font-bold text-primary">
+                       +{isCorrectGuess ? '100' : '25'} 0xP
+                     </div>
+                   </div>
+                   <div className="text-4xl">⚡</div>
+                 </div>
+                 <p className="text-gray-400 text-xs mt-2">Collect 0xP to earn rewards in future airdrops!</p>
                </div>
 
                {/* Claim Button - Only show if won current game or draw (refund) */}

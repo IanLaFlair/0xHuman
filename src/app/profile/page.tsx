@@ -35,8 +35,11 @@ export default function ProfilePage() {
     if (address) {
       setLoading(true);
       
+      // Use environment variable for API base URL, fallback to relative path for same-origin
+      const apiBase = process.env.NEXT_PUBLIC_WS_URL || '';
+      
       // Fetch EXP data
-      fetch(`http://localhost:3001/api/exp/${address}`)
+      fetch(`${apiBase}/api/exp/${address}`)
         .then(res => res.json())
         .then(data => {
           setExpData(data);
@@ -46,7 +49,7 @@ export default function ProfilePage() {
         });
       
       // Fetch match history
-      fetch(`http://localhost:3001/api/match-history/${address}`)
+      fetch(`${apiBase}/api/match-history/${address}`)
         .then(res => res.json())
         .then(data => {
           setMatchHistory(data.history || []);

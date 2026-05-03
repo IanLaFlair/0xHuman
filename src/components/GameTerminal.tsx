@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount, useSignMessage, usePublicClient, useChainId } from 'wagmi';
+import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
+import BotINFTABI from '@/contracts/BotINFTABI.json';
 import { useGameStatus, useJoinGame, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
 import { formatEther, keccak256, encodePacked, toHex } from 'viem';
 import TransactionOverlay from './TransactionOverlay';
@@ -46,21 +48,31 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   const [hasSignedVote, setHasSignedVote] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
 
+  interface RevealPayload { wasPvE: boolean; botTokenId?: number; personaSlug?: string }
+  interface PersonaReveal { name: string; tagline?: string; color?: string; custom?: boolean }
+  const [reveal, setReveal] = useState<RevealPayload | null>(null);
+  const [personaReveal, setPersonaReveal] = useState<PersonaReveal | null>(null);
+  const publicClient = usePublicClient();
+  const chainIdLive = useChainId();
+
   // Derive result info from gameData
-  // gameData: [player1, player2, stake, status, MODE, winner, timestamp, isPlayer2Bot, player1GuessedBot, player1Submitted, player2GuessedBot, player2Submitted]
-  const player1Address = gameData ? (gameData as any)[0] : null;
-  const player2Address = gameData ? (gameData as any)[1] : null;
+  // 0G struct: [player1, player2, botTokenId, stake, status, mode, winner, timestamp,
+  //             isPlayer2Bot, p1GuessedBot, p1Submitted, p2GuessedBot, p2Submitted,
+  //             chatLogHash, chatLogURI]
+  const g = gameData as any;
+  const player1Address = g ? g[0] : null;
+  const player2Address = g ? g[1] : null;
+  const botTokenId = g ? Number(g[2]) : 0;
   const isPlayer1 = address && player1Address && address.toLowerCase() === player1Address.toLowerCase();
   const isPlayer2 = address && player2Address && address.toLowerCase() === player2Address.toLowerCase();
-  
-  // Index shifted by 1 after mode was added at index 4
-  const isPlayer2Bot = gameData ? Boolean((gameData as any)[7]) : false;
-  const player1GuessedBot = gameData ? Boolean((gameData as any)[8]) : false;
-  const player1Submitted = gameData ? Boolean((gameData as any)[9]) : false;
-  const player2GuessedBot = gameData ? Boolean((gameData as any)[10]) : false;
-  const player2Submitted = gameData ? Boolean((gameData as any)[11]) : false;
-  
-  const winner = gameData ? (gameData as any)[5] : null; // Was 4, now 5 after mode
+
+  const isPlayer2Bot = g ? Boolean(g[8]) : false;
+  const player1GuessedBot = g ? Boolean(g[9]) : false;
+  const player1Submitted = g ? Boolean(g[10]) : false;
+  const player2GuessedBot = g ? Boolean(g[11]) : false;
+  const player2Submitted = g ? Boolean(g[12]) : false;
+
+  const winner = g ? g[6] : null;
   const isDraw = winner === '0x0000000000000000000000000000000000000000';
   const isWinner = winner && address && typeof winner === 'string' && winner.toLowerCase() === address.toLowerCase();
   
@@ -135,9 +147,36 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     });
     
     // Listen for game resolution with txHash
-    socket.on("gameResolved", (data: { gameId: number, txHash: string }) => {
-        console.log("Game resolved! TX:", data.txHash);
+    socket.on("bot_ready", (data: { gameId: number }) => {
+        // Reset the match timer to a fresh 60s window once the bot is actually
+        // ready to chat. Server emits this after BotSession is constructed
+        // (memory loaded from 0G Storage etc), so the visible turn time isn't
+        // eaten by infrastructure latency.
+        console.log("Bot ready for game", data.gameId);
+        setGameStartTime(Date.now());
+        setTimeLeft(60);
+    });
+
+    socket.on("gameResolved", (data: { gameId: number, txHash: string, reveal?: RevealPayload }) => {
+        console.log("Game resolved! TX:", data.txHash, "reveal:", data.reveal);
         setResolutionTxHash(data.txHash);
+        if (data.reveal) {
+            setReveal(data.reveal);
+            // If PvE, fetch persona meta from server using botTokenId → on-chain hash → backend lookup
+            if (data.reveal.wasPvE && data.reveal.personaSlug) {
+                // Try direct slug lookup via list
+                const wsUrl = (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'))
+                    ? window.location.origin
+                    : 'http://localhost:3001';
+                fetch(`${wsUrl}/api/personas/list`)
+                    .then((r) => r.json())
+                    .then((d) => {
+                        const match = (d.personas ?? []).find((p: any) => p.slug === data.reveal!.personaSlug);
+                        if (match) setPersonaReveal({ name: match.name, tagline: match.tagline, color: match.color });
+                    })
+                    .catch(() => {});
+            }
+        }
     });
 
     // Listen for access denied from server
@@ -151,39 +190,82 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     };
   }, [arenaId, address]);
 
+  // Fallback reveal lookup — when the finished view renders without reveal data
+  // (e.g. socket missed the gameResolved event due to refresh), reconstruct it
+  // from on-chain state: read game.botTokenId, fetch the bot's personalityHash,
+  // ask the backend persona-by-hash endpoint, and populate the reveal card.
+  useEffect(() => {
+    if (gameState !== 'finished') return;
+    if (!gameData || !publicClient) return;
+    if (reveal) return; // already have it from socket
+
+    const g = gameData as any;
+    const tokenId = Number(g[2] ?? 0);
+    const isPvEViaIndex = Boolean(g[8]); // isPlayer2Bot
+    if (tokenId === 0 || !isPvEViaIndex) {
+      setReveal({ wasPvE: false });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const botAddr = (() => {
+          try { return getAddresses(chainIdLive).BotINFT; } catch { return getAddresses(DEFAULT_CHAIN_ID).BotINFT; }
+        })();
+        const bot = await publicClient.readContract({
+          address: botAddr,
+          abi: BotINFTABI,
+          functionName: 'bots',
+          args: [BigInt(tokenId)],
+        }) as any;
+        if (cancelled) return;
+        const personalityHash = String(bot[0]).toLowerCase();
+
+        const wsUrl = (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'))
+          ? window.location.origin
+          : 'http://localhost:3001';
+        const r = await fetch(`${wsUrl}/api/personas/by-hash?h=${personalityHash}`);
+        if (!r.ok || cancelled) return;
+        const meta = await r.json();
+        setReveal({ wasPvE: true, botTokenId: tokenId, personaSlug: meta.slug });
+        setPersonaReveal({ name: meta.name, tagline: meta.tagline, color: meta.color, custom: meta.custom });
+      } catch (e) {
+        console.warn('reveal fallback failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gameState, gameData, publicClient, chainIdLive, reveal]);
+
   // Sync Game State
   useEffect(() => {
     if (!gameData) return;
 
-    // gameData: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, ...]
-    const status = Number((gameData as any)[3]);
-    const player2 = (gameData as any)[1];
-    
-    // 0=Waiting, 1=Active, 2=Finished
+    // 0G struct indexes: status=4, stake=3
+    const gd = gameData as any;
+    const status = Number(gd[4]);
+
+    // 0=Open, 1=Active, 2=Resolved
     if (status === 1) {
       if (gameState !== 'playing' && gameState !== 'voting' && gameState !== 'finished') {
         setGameState('playing');
         addSystemMessage("OPPONENT CONNECTED. SESSION START.");
-        
-        // Set game start time to NOW when we first detect the game is Active
-        // This ensures timer starts fresh when opponent joins, not from creation time
+
         if (!gameStartTime) {
           setGameStartTime(Date.now());
-          setTimeLeft(60); // Full 60 seconds
+          setTimeLeft(60);
         }
       }
-      
-      // Update Stake from Contract
-      const stakeWei = (gameData as any)[2];
+
+      // Update Stake from Contract (now at index 3)
+      const stakeWei = gd[3];
       if (stakeWei) {
         setRealStake(formatEther(stakeWei));
       }
 
-      // If we already have a start time, calculate remaining based on that
       if (gameStartTime) {
         const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
         const remaining = Math.max(0, 60 - elapsed);
-        // Only update if significantly different to avoid jumping
         if (Math.abs(remaining - timeLeft) > 2) {
           setTimeLeft(remaining);
         }
@@ -403,7 +485,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
               <div className="text-primary font-bold mb-4 border-b border-muted pb-2">SYSTEM LOG</div>
               <div className="space-y-2 flex-1 overflow-y-auto">
                 <p>[14:02:01] &gt; Initializing handshake protocol...</p>
-                <p>[14:02:02] &gt; Connecting to Mantle Node #882...</p>
+                <p>[14:02:02] &gt; Connecting to 0G Node #882...</p>
                 <p className="text-green-500">[14:02:02] &gt; Secure connection established.</p>
                 <p>[14:02:03] &gt; Encrypting user payload...</p>
                 <p>[14:02:04] &gt; Scanning pool for matches [Rating: 1200-1400]...</p>
@@ -468,7 +550,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   if (gameState === 'voting') {
     // Check if current player has already submitted verdict
     const hasAlreadySubmitted = mySubmitted;
-    const gameStatus = gameData ? Number((gameData as any)[3]) : 0;
+    const gameStatus = gameData ? Number((gameData as any)[4]) : 0;
     
     // Show waiting screen if:
     // 1. Contract confirms player has submitted (mySubmitted = true) AND game not resolved yet, OR
@@ -636,8 +718,8 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                MATCH ID: #{arenaId} // {isDraw ? 'DRAW - STAKES REFUNDED' : isCorrectGuess ? 'CORRECT IDENTIFICATION' : 'DECEPTION DETECTED'}
              </p>
              {resolutionTxHash && (
-               <a 
-                 href={`https://sepolia.mantlescan.xyz/tx/${resolutionTxHash}`}
+               <a
+                 href={`https://chainscan-galileo.0g.ai/tx/${resolutionTxHash}`}
                  target="_blank"
                  rel="noopener noreferrer"
                  className="text-xs text-gray-500 hover:text-primary transition-colors"
@@ -646,6 +728,57 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                </a>
              )}
            </div>
+
+           {/* Bot reveal card — shown when match was PvE */}
+           {reveal?.wasPvE && (
+             <div className="rounded-lg border border-primary/40 bg-gradient-to-br from-primary/10 to-purple-500/5 p-6">
+               <div className="flex items-center gap-2 text-primary text-xs tracking-widest uppercase mb-4">
+                 <Terminal className="w-4 h-4" /> Identity unmasked
+               </div>
+               <div className="flex items-start gap-5">
+                 <div
+                   className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-black text-2xl flex-shrink-0 shadow-lg"
+                   style={{ background: personaReveal?.color ?? '#7C7AED' }}
+                 >
+                   {personaReveal?.name?.slice(0, 2) ?? 'AI'}
+                 </div>
+                 <div className="flex-1 min-w-0">
+                   <div className="flex items-center gap-2 flex-wrap mb-2">
+                     <span className="text-2xl font-bold text-white">
+                       {isCorrectGuess
+                         ? `You unmasked ${personaReveal?.name ?? 'an AI bot'}`
+                         : `Defeated by ${personaReveal?.name ?? 'an AI bot'}`}
+                     </span>
+                     {personaReveal?.custom && (
+                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">CUSTOM</span>
+                     )}
+                   </div>
+                   {personaReveal?.tagline && (
+                     <p className="text-gray-300 text-sm mb-3 italic">"{personaReveal.tagline}"</p>
+                   )}
+                   <div className="text-xs text-gray-400 space-y-1">
+                     <div>This bot is an INFT (Agent ID / ERC-7857) on 0G Chain.</div>
+                     <div>
+                       Token #{reveal.botTokenId} •{' '}
+                       <a
+                         href={`https://chainscan-galileo.0g.ai/token/0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e?a=${reveal.botTokenId}`}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className="text-primary hover:underline"
+                       >
+                         View on Explorer ↗
+                       </a>
+                     </div>
+                   </div>
+                   <div className="mt-4 text-[10px] text-gray-500 leading-relaxed border-t border-gray-800 pt-3">
+                     The replies you received were generated by 0G Compute (TEE-attested
+                     inference, Qwen 2.5 7B Instruct). The bot's persona prompt is
+                     encrypted on 0G Storage and only its INFT owner can decrypt it.
+                   </div>
+                 </div>
+               </div>
+             </div>
+           )}
 
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              {/* Left: Identity Reveal */}
@@ -697,7 +830,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                <div className="grid grid-cols-2 gap-4">
                  <div className="bg-secondary/50 border border-muted p-6 rounded-lg">
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
-                   <div className="text-2xl font-bold text-white">{realStake} MNT</div>
+                   <div className="text-2xl font-bold text-white">{realStake} 0G</div>
                  </div>
                  <div className={`p-6 rounded-lg ${
                    isDraw ? 'bg-yellow-900/10 border border-yellow-900/50' :
@@ -709,7 +842,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    <div className={`text-2xl font-bold ${
                      isDraw ? 'text-yellow-500' : isCorrectGuess ? 'text-green-500' : 'text-red-500'
                    }`}>
-                     {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
+                     {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} 0G
                    </div>
                  </div>
                </div>
@@ -736,7 +869,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    className={`w-full ${isDraw ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-4 rounded transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
                  >
                    {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isDraw ? 'REFUND' : 'PRIZE'} (${formatEther(winningsBalance as bigint)} MNT)`}
+                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isDraw ? 'REFUND' : 'PRIZE'} (${formatEther(winningsBalance as bigint)} 0G)`}
                  </button>
                ) : isClaimed ? (
                  <div className="w-full bg-green-600/20 border border-green-500/50 text-green-500 font-bold py-4 rounded flex items-center justify-center gap-2">
@@ -915,11 +1048,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
            <div className="space-y-6">
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">STAKE AMOUNT</span>
-               <span className="text-sm font-bold text-primary">{realStake} MNT</span>
+               <span className="text-sm font-bold text-primary">{realStake} 0G</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">WIN POTENTIAL</span>
-               <span className="text-sm font-bold text-accent-green">{(parseFloat(realStake) * 1.9).toFixed(1)} MNT</span>
+               <span className="text-sm font-bold text-accent-green">{(parseFloat(realStake) * 1.9).toFixed(1)} 0G</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">LATENCY</span>

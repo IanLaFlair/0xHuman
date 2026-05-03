@@ -27,12 +27,29 @@ export default async function DocPage({
     notFound();
   }
 
+  // Resolve relative .md links written inside the source markdown to the
+  // app's /docs/<slug> routes. Without this, [foo](bar.md) navigates to
+  // <currentpath>/bar.md and 404s.
+  const currentDocPath = '/docs/' + (slug ?? []).join('/');
+  const rewriteHref = (href: string | undefined): string | undefined => {
+    if (!href) return href;
+    if (href.startsWith('http://') || href.startsWith('https://')) return href;
+    if (href.startsWith('mailto:') || href.startsWith('#')) return href;
+    let resolved = href;
+    if (!resolved.startsWith('/')) {
+      try {
+        const base = `https://_/${currentDocPath.replace(/^\//, '')}/`;
+        resolved = new URL(resolved, base).pathname;
+      } catch { /* fall through */ }
+    }
+    resolved = resolved.replace(/\/README\.md$/i, '');
+    resolved = resolved.replace(/\.md$/i, '');
+    if (resolved === '/docs/') resolved = '/docs';
+    return resolved;
+  };
+
   return (
     <article className="max-w-none">
-      {/* 
-        We can optionally render the title from frontmatter if it exists, 
-        but usually the markdown has a # Title 
-      */}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -53,7 +70,7 @@ export default async function DocPage({
              return <code className="block bg-black border border-gray-800 p-4 rounded text-sm font-mono overflow-x-auto text-gray-300 my-4" {...props} />
           },
           img: ({node, ...props}) => <img className="rounded-lg border border-gray-800 shadow-lg my-6" {...props} />,
-          a: ({node, ...props}) => <a className="text-primary hover:underline transition-colors" {...props} />,
+          a: ({node, href, ...props}) => <a href={rewriteHref(href as string | undefined)} className="text-primary hover:underline transition-colors" {...props} />,
           table: ({node, ...props}) => <div className="overflow-x-auto my-6"><table className="min-w-full divide-y divide-gray-800" {...props} /></div>,
           th: ({node, ...props}) => <th className="px-6 py-3 bg-gray-900 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" {...props} />,
           td: ({node, ...props}) => <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 border-b border-gray-800" {...props} />,

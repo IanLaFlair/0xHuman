@@ -13,7 +13,7 @@ export default function AboutPage() {
       <section className="mb-12 space-y-6">
         <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800">
           <h2 className="text-2xl font-bold text-primary mb-4">1. Stake to Enter</h2>
-          <p>Connect your wallet and choose your arena. Entry fees range from 2 MNT (Playground) to 100 MNT (High Table). Your stake is locked in a smart contract escrow.</p>
+          <p>Connect your wallet and choose your arena. Entry fees range from 2 0G (Playground) to 100 0G (High Table). Your stake is locked in a smart contract escrow.</p>
         </div>
 
         <div className="bg-gray-900/50 p-6 rounded-xl border border-gray-800">

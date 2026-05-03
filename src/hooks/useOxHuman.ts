@@ -1,12 +1,25 @@
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount } from 'wagmi';
-import OxHumanArtifact from '../contracts/OxHumanABI.json';
-const OxHumanABI = OxHumanArtifact.abi;
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount, useChainId } from 'wagmi';
+import OxHumanABI from '../contracts/OxHumanABI.json';
 import { parseEther } from 'viem';
+import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` || '0x0000000000000000000000000000000000000000';
+/**
+ * Resolve the OxHuman contract address for the connected chain. Falls back
+ * to the default-chain deployment when wallet isn't connected to a known
+ * 0G network.
+ */
+function useContractAddress(): `0x${string}` {
+    const chainId = useChainId();
+    try {
+        return getAddresses(chainId).OxHuman;
+    } catch {
+        return getAddresses(DEFAULT_CHAIN_ID).OxHuman;
+    }
+}
 
 // Hook for creating a game
 export function useCreateGame() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { writeContract, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
         useWaitForTransactionReceipt({ hash });
@@ -23,19 +36,20 @@ export function useCreateGame() {
     return { createGame, isPending, isConfirming, isConfirmed, hash, receipt, error };
 }
 
-// Hook for joining a game
+// Hook for joining a game (PvP only — bot routing happens via convertToPvE
+// from the resolver, never invoked from the frontend)
 export function useJoinGame() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { writeContract, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
         useWaitForTransactionReceipt({ hash });
 
     const joinGame = async (gameId: number, stakeAmount: string) => {
-        // Note: isBot param is hardcoded to false for now as this is for human players
         writeContract({
             address: CONTRACT_ADDRESS,
             abi: OxHumanABI,
             functionName: 'joinGame',
-            args: [BigInt(gameId), false],
+            args: [BigInt(gameId)],
             value: parseEther(stakeAmount),
         });
     };
@@ -45,12 +59,12 @@ export function useJoinGame() {
 
 // Hook for submitting a verdict
 export function useSubmitVerdict() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { writeContract, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
         useWaitForTransactionReceipt({ hash });
 
     const submitVerdict = (gameId: number, guessedBot: boolean) => {
-        console.log(`Submitting verdict for game ${gameId}...`);
         writeContract({
             address: CONTRACT_ADDRESS,
             abi: OxHumanABI,
@@ -64,13 +78,14 @@ export function useSubmitVerdict() {
 
 // Hook for reading game status
 export function useGameStatus(gameId: number) {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { data, isLoading, error, refetch } = useReadContract({
         address: CONTRACT_ADDRESS,
         abi: OxHumanABI,
         functionName: 'games',
         args: [BigInt(gameId)],
         query: {
-            refetchInterval: 3000, // Poll every 3 seconds (reduced from 1s to prevent 429 rate limiting)
+            refetchInterval: 3000,
         },
     });
 
@@ -79,6 +94,7 @@ export function useGameStatus(gameId: number) {
 
 // Hook for reading game count
 export function useGameCount() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { data, isLoading, error } = useReadContract({
         address: CONTRACT_ADDRESS,
         abi: OxHumanABI,
@@ -88,8 +104,9 @@ export function useGameCount() {
     return { data, isLoading, error };
 }
 
-// [NEW] Hook for reading winnings balance
+// Hook for reading winnings balance
 export function useWinningsBalance(address: `0x${string}` | undefined) {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { data, isLoading, error, refetch } = useReadContract({
         address: CONTRACT_ADDRESS,
         abi: OxHumanABI,
@@ -97,15 +114,16 @@ export function useWinningsBalance(address: `0x${string}` | undefined) {
         args: address ? [address] : undefined,
         query: {
             enabled: !!address,
-            refetchInterval: 2000, // Poll every 2 seconds
+            refetchInterval: 2000,
         },
     });
 
     return { data, isLoading, error, refetch };
 }
 
-// [NEW] Hook for claiming winnings
+// Hook for claiming winnings
 export function useClaimWinnings() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const { writeContract, data: hash, isPending, error } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } =
         useWaitForTransactionReceipt({ hash });
@@ -121,26 +139,22 @@ export function useClaimWinnings() {
     return { claimWinnings, isPending, isConfirming, isConfirmed, hash, receipt, error };
 }
 
-// Hook for finding a match
+// Hook for finding a match (Open PvP games available to join)
 export function useFindMatch() {
+    const CONTRACT_ADDRESS = useContractAddress();
     const publicClient = usePublicClient();
     const { address } = useAccount();
 
     const findMatch = async (stakeAmount: string): Promise<number | null> => {
         if (!publicClient) return null;
-
         try {
-            // Get total game count
             const count = await publicClient.readContract({
                 address: CONTRACT_ADDRESS,
                 abi: OxHumanABI,
                 functionName: 'gameCount',
             }) as bigint;
-
             const totalGames = Number(count);
             const stakeWei = parseEther(stakeAmount);
-
-            // Search backwards from the latest game (limit to last 10 for performance)
             const limit = Math.max(0, totalGames - 10);
 
             for (let i = totalGames - 1; i >= limit; i--) {
@@ -150,19 +164,16 @@ export function useFindMatch() {
                     functionName: 'games',
                     args: [BigInt(i)],
                 }) as any;
-
-                // Check if game is WAITING (status 0), has correct stake, and I am not the creator
-                // game structure: [player1, player2, stake, status, winner, timestamp, isPlayer2Bot, ...]
-                // status 0 = Waiting
-                if (game[3] === 0 && game[2] === stakeWei && game[0] !== address) {
-                    return i; // Found a match!
+                // game tuple: [player1, player2, botTokenId, stake, status, mode, winner, ...]
+                // Status enum: 0=Open, 1=Active, 2=Resolved
+                if (game[4] === 0 && game[3] === stakeWei && game[0] !== address) {
+                    return i;
                 }
             }
         } catch (error) {
-            console.error("Error finding match:", error);
+            console.error('Error finding match:', error);
         }
-
-        return null; // No match found
+        return null;
     };
 
     return { findMatch };

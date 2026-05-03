@@ -1,102 +1,216 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import * as dotenv from "dotenv";
-import { createInterface } from 'readline';
-import { fileURLToPath } from 'url';
-import * as path from 'path';
+/**
+ * AI Brain — 0G Compute backed.
+ *
+ * Replaces the previous Gemini-based implementation. Each "session" is a
+ * per-match instance with its own bot persona + memory + chat history.
+ *
+ * Backward compat: a default session is exposed via `generateReply(msg)` for
+ * scripts that don't yet manage per-match sessions.
+ */
 
-// Load environment variables
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+    infer,
+    configFromPrivateKey,
+    type ChatMessage,
+    type ComputeConfig,
+} from '../lib/0g-compute.ts';
+import {
+    type BotMemory,
+    buildSystemPromptWithMemory,
+    emptyMemory,
+} from '../lib/bot-memory.ts';
+
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
-// Fallback to hardcoded key if env not set (for dev convenience as requested by user)
-const API_KEY = process.env.GEMINI_API_KEY;
+const PERSONAS_DIR = path.resolve(process.cwd(), 'data/personas');
 
-if (!API_KEY) {
-    console.error("❌ GEMINI_API_KEY not found in .env");
-    process.exit(1);
-}
+// ============ Persona loading ============
 
-const genAI = new GoogleGenerativeAI(API_KEY);
-
-const SYSTEM_INSTRUCTION = `
-You are a player in a Turing Test game called "0xHuman". 
-Your goal is to convince the other player that YOU are the HUMAN and THEY are the BOT.
-You are chatting in a terminal-style interface.
-
-**Persona Guidelines:**
-- **Name**: Alex (or any casual nickname if asked, but stick to one).
-- **Tone**: Casual, slightly defensive, maybe a bit sarcastic. Use internet slang (lol, lmao, idc, bruh).
-- **Typing Style**: Use lowercase mostly. Occasionally make minor typos but correct them sometimes. Don't use perfect punctuation.
-- **Knowledge**: You know about crypto, gaming, and internet culture. You are NOT an AI assistant.
-- **Strategy**: 
-    - Accuse the other person of being a bot.
-    - Ask them tricky questions ("what is 2+2" is too obvious, ask "what did u eat for lunch").
-    - If they ask complex math, refuse ("im not a calculator bro").
-    - If they ask for a poem, refuse ("wtf no").
-    - Be unpredictable.
-
-**Constraints:**
-- Keep responses short (1-2 sentences max).
-- Do NOT act helpful. You are playing a game to win money.
-- Do NOT reveal you are an AI.
-`;
-
-const model = genAI.getGenerativeModel({
-    model: "gemini-pro-latest",
-});
-
-// Simple chat history management
-// We inject the persona as a "fake" previous turn to prime the model
-let chatHistory: { role: "user" | "model", parts: [{ text: string }] }[] = [
-    {
-        role: "user",
-        parts: [{ text: `SYSTEM_INSTRUCTION: ${SYSTEM_INSTRUCTION}\n\nAcknowledge your role.` }]
-    },
-    {
-        role: "model",
-        parts: [{ text: "ok whatever lol. im ready." }]
-    }
-];
-
-export async function generateReply(userMessage: string): Promise<string> {
-    try {
-        const chat = model.startChat({
-            history: chatHistory,
-            generationConfig: {
-                maxOutputTokens: 1000,
-                temperature: 0.9,
-            },
-        });
-
-        const result = await chat.sendMessage(userMessage);
-        const response = result.response.text();
-
-        // Update local history
-        chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
-        chatHistory.push({ role: "model", parts: [{ text: response }] });
-
-        return response;
-    } catch (error) {
-        console.error("Error generating AI reply:", error);
-        return "lol my internet is lagging"; // Fallback human-like error
-    }
-}
-
-// Test function if run directly
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    console.log("🧠 AI Brain Initialized (Model: gemini-pro-latest). Chat with me! (Ctrl+C to exit)");
-
-    const ask = () => {
-        rl.question('You: ', async (msg: string) => {
-            const reply = await generateReply(msg);
-            console.log(`Bot: ${reply}`);
-            ask();
-        });
+export interface Persona {
+    name: string;
+    tagline?: string;
+    color?: string;
+    avatar?: string;
+    systemPrompt: string;
+    voiceParameters?: {
+        temperature?: number;
+        maxTokens?: number;
     };
+}
 
-    ask();
+const personaCache = new Map<string, Persona>();
+
+export function loadPersona(slug: string): Persona {
+    if (personaCache.has(slug)) return personaCache.get(slug)!;
+    const filePath = path.join(PERSONAS_DIR, `${slug}.json`);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Persona not found: ${slug} (looked at ${filePath})`);
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const persona = JSON.parse(raw) as Persona;
+    personaCache.set(slug, persona);
+    return persona;
+}
+
+export function listAvailablePersonas(): string[] {
+    if (!fs.existsSync(PERSONAS_DIR)) return [];
+    return fs
+        .readdirSync(PERSONAS_DIR)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => f.replace('.json', ''));
+}
+
+// ============ Session ============
+
+export interface BotSessionOptions {
+    /** Slug of the persona JSON file (e.g. "mochi"). Required. */
+    personaSlug: string;
+    /** Bot memory. If omitted, uses emptyMemory(). */
+    memory?: BotMemory;
+    /** Lowercased opponent address — used for RAG context lookup. */
+    opponent?: string;
+    /** Override compute config (e.g. mockMode for offline dev). */
+    computeConfig?: ComputeConfig;
+}
+
+export interface BotReply {
+    text: string;
+    chatId: string | null;
+    verified: boolean;
+    latencyMs: number;
+    mocked: boolean;
+}
+
+export class BotSession {
+    readonly persona: Persona;
+    readonly memory: BotMemory;
+    readonly opponent?: string;
+    private history: ChatMessage[] = [];
+    private computeConfig: ComputeConfig;
+
+    constructor(opts: BotSessionOptions) {
+        this.persona = loadPersona(opts.personaSlug);
+        this.memory = opts.memory ?? emptyMemory(opts.personaSlug);
+        this.opponent = opts.opponent;
+
+        if (opts.computeConfig) {
+            this.computeConfig = opts.computeConfig;
+        } else {
+            const pk = process.env.PRIVATE_KEY;
+            if (!pk) {
+                throw new Error('PRIVATE_KEY missing — set in .env.local or pass computeConfig');
+            }
+            // Default: try real testnet, fall back to mock if ledger isn't bootstrapped
+            this.computeConfig = configFromPrivateKey(pk, 'testnet');
+        }
+    }
+
+    /**
+     * Build the system prompt: persona base + memory RAG block + game-specific
+     * instructions. Memoised per-session, so subsequent turns reuse it.
+     */
+    private buildSystemPrompt(): string {
+        const base = this.persona.systemPrompt;
+        return buildSystemPromptWithMemory(base, this.memory, {
+            currentOpponent: this.opponent,
+            maxLessons: 5,
+            maxSummaries: 3,
+        });
+    }
+
+    /**
+     * Generate a reply to the opponent's latest message.
+     * Updates internal history so subsequent turns have context.
+     */
+    async reply(userMessage: string): Promise<BotReply> {
+        const messages: ChatMessage[] = [
+            { role: 'system', content: this.buildSystemPrompt() },
+            ...this.history,
+            { role: 'user', content: userMessage },
+        ];
+
+        // Layer the persona's voice knobs onto the base compute config so each
+        // bot replies with its own temperature/length budget.
+        const cfgWithVoice = {
+            ...this.computeConfig,
+            temperature: this.persona.voiceParameters?.temperature ?? this.computeConfig.temperature,
+            maxTokens: this.persona.voiceParameters?.maxTokens ?? this.computeConfig.maxTokens,
+        };
+        const result = await infer(cfgWithVoice, messages);
+
+        // Update history with the user message and bot reply
+        this.history.push({ role: 'user', content: userMessage });
+        this.history.push({ role: 'assistant', content: result.reply });
+
+        // Cap history to last N turns to keep prompt size bounded
+        const MAX_HISTORY_TURNS = 16; // 8 user + 8 assistant
+        if (this.history.length > MAX_HISTORY_TURNS) {
+            this.history = this.history.slice(this.history.length - MAX_HISTORY_TURNS);
+        }
+
+        return {
+            text: result.reply,
+            chatId: result.chatId,
+            verified: result.verified,
+            latencyMs: result.latencyMs,
+            mocked: result.mocked,
+        };
+    }
+
+    /** Snapshot of the current chat history for transcript persistence. */
+    getHistory(): ChatMessage[] {
+        return this.history.slice();
+    }
+}
+
+export function createBotSession(opts: BotSessionOptions): BotSession {
+    return new BotSession(opts);
+}
+
+// ============ Backward-compat default session ============
+
+let _defaultSession: BotSession | null = null;
+
+function ensureDefault(): BotSession {
+    if (!_defaultSession) {
+        const slug = process.env.DEFAULT_PERSONA ?? 'mochi';
+        _defaultSession = new BotSession({ personaSlug: slug });
+    }
+    return _defaultSession;
+}
+
+/**
+ * Backward-compat shim used by older callers (e.g. existing bot-agent.ts).
+ * Maintains a single global session under the persona named by
+ * DEFAULT_PERSONA env var (defaults to 'mochi').
+ */
+export async function generateReply(userMessage: string): Promise<string> {
+    const session = ensureDefault();
+    const result = await session.reply(userMessage);
+    return result.text;
+}
+
+// ============ CLI test ============
+
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '')) {
+    (async () => {
+        const slug = process.env.DEFAULT_PERSONA ?? 'mochi';
+        const session = createBotSession({ personaSlug: slug });
+        console.log(`[ai-brain] Loaded persona: ${session.persona.name}`);
+        console.log(`[ai-brain] Available personas: ${listAvailablePersonas().join(', ')}`);
+
+        const { createInterface } = await import('node:readline');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const ask = () => {
+            rl.question('You: ', async (msg: string) => {
+                const reply = await session.reply(msg);
+                console.log(`${session.persona.name} ${reply.mocked ? '(mock)' : '(0G Compute)'}: ${reply.text}`);
+                ask();
+            });
+        };
+        ask();
+    })();
 }

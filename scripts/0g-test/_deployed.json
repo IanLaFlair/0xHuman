@@ -1,0 +1,11 @@
+{
+  "network": "zeroGTestnet",
+  "chainId": 16602,
+  "deployedAt": "2026-05-03T11:40:53.141Z",
+  "deployer": "0x7200c2e8e506105a41e2CF21D1D3F9a5d8907d9b",
+  "contracts": {
+    "BotINFT": "0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e",
+    "OxHuman": "0x02adB0b07b53cC800b1173bceEd719426E2D5F02"
+  },
+  "explorerBaseUrl": "https://chainscan-galileo.0g.ai"
+}

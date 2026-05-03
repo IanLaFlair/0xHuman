@@ -37,7 +37,16 @@ if (isMnemonic) {
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: "0.8.24",
+  solidity: {
+    version: "0.8.24",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
+      viaIR: true,
+    },
+  },
   networks: {
     mantleTestnet: {
       url: "https://rpc.sepolia.mantle.xyz",
@@ -48,6 +57,16 @@ module.exports = {
       url: "https://rpc.mantle.xyz",
       accounts: accountsConfig,
       chainId: 5000,
+    },
+    zeroGTestnet: {
+      url: "https://evmrpc-testnet.0g.ai",
+      accounts: accountsConfig,
+      chainId: 16602,
+    },
+    zeroGMainnet: {
+      url: "https://evmrpc.0g.ai",
+      accounts: accountsConfig,
+      chainId: 16661,
     },
   },
 };

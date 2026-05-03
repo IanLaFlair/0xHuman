@@ -40,8 +40,8 @@ export default function Navbar() {
         <Link href="/arena" className={`${isActive('/arena')} transition-colors pb-0.5`}>
           // ARENA
         </Link>
-        <Link href="/house-pool" className={`${isActive('/house-pool')} transition-colors pb-0.5`}>
-          // HOUSE POOL
+        <Link href="/bots/my" className={`${isActive('/bots')} transition-colors pb-0.5`}>
+          // MY BOTS
         </Link>
         <Link href="/leaderboard" className={`${isActive('/leaderboard')} transition-colors pb-0.5`}>
           // LEADERBOARD
@@ -85,12 +85,12 @@ export default function Navbar() {
           >
             // ARENA
           </Link>
-          <Link 
-            href="/house-pool" 
-            className={`${isActive('/house-pool')} text-lg py-2 border-b border-gray-800`}
+          <Link
+            href="/bots/my"
+            className={`${isActive('/bots')} text-lg py-2 border-b border-gray-800`}
             onClick={() => setIsMenuOpen(false)}
           >
-            // HOUSE POOL
+            // MY BOTS
           </Link>
           <Link 
             href="/leaderboard" 

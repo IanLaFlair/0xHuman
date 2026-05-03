@@ -72,7 +72,7 @@ export default function LeaderboardPage() {
           <div className="flex gap-4">
             <div className="bg-secondary/30 border border-muted p-4 rounded min-w-[140px]">
               <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Staked</div>
-              <div className="text-xl font-bold text-white">1,024,500 MNT</div>
+              <div className="text-xl font-bold text-white">1,024,500 0G</div>
             </div>
             <div className="bg-secondary/30 border border-muted p-4 rounded min-w-[140px]">
               <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Active Humans</div>
@@ -116,7 +116,7 @@ export default function LeaderboardPage() {
                 <div className="col-span-5 md:col-span-4">Human Identity</div>
                 <div className="col-span-2 text-right hidden md:block">Total Wins</div>
                 <div className="col-span-3 md:col-span-2 text-center">Win Rate</div>
-                <div className="col-span-3 text-right text-primary">MNT Earned</div>
+                <div className="col-span-3 text-right text-primary">0G Earned</div>
               </div>
 
               {/* Table Body */}
@@ -202,7 +202,7 @@ export default function LeaderboardPage() {
             </div>
             <div>
               <div className="text-[10px] text-gray-500 uppercase tracking-wider">Earned</div>
-              <div className="text-primary font-bold">50.00 MNT</div>
+              <div className="text-primary font-bold">50.00 0G</div>
             </div>
           </div>
 

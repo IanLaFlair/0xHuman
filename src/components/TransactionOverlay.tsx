@@ -48,7 +48,7 @@ export default function TransactionOverlay({
 
         {/* Tip */}
         <p className="text-gray-500 text-xs font-mono max-w-sm mx-auto">
-          Do not close this window. The transaction is being processed on the Mantle network.
+          Do not close this window. The transaction is being processed on the 0G network.
         </p>
       </div>
 

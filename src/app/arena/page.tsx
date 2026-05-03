@@ -10,12 +10,7 @@ import Navbar from '@/components/Navbar';
 import { useCreateGame, useJoinGame, useFindMatch } from '@/hooks/useOxHuman';
 import { decodeEventLog } from 'viem';
 import OxHumanArtifact from '@/contracts/OxHumanABI.json';
-const OxHumanABI = OxHumanArtifact.abi;
-
-const HOUSE_VAULT_ADDRESS = process.env.NEXT_PUBLIC_HOUSE_VAULT_ADDRESS as `0x${string}`;
-const HOUSE_VAULT_ABI = [
-  { name: 'maxBet', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }
-] as const;
+const OxHumanABI = OxHumanArtifact;
 
 export default function ArenaPage() {
   const { isConnected, address } = useAccount();
@@ -24,23 +19,15 @@ export default function ArenaPage() {
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
   const [targetGameId, setTargetGameId] = useState<number | null>(null);
-  
+
   const { createGame, isPending: isCreating, isConfirming: isConfirmingCreate, isConfirmed: isCreated, hash: createHash, receipt: createReceipt } = useCreateGame();
   const { joinGame, isPending: isJoining, isConfirming: isConfirmingJoin, isConfirmed: isJoined, hash: joinHash } = useJoinGame();
   const { findMatch } = useFindMatch();
 
-  // Fetch maxBet from HouseVault to check pool capacity
-  const { data: maxBetRaw } = useReadContract({
-    address: HOUSE_VAULT_ADDRESS,
-    abi: HOUSE_VAULT_ABI,
-    functionName: 'maxBet',
-  });
-  const maxBet = maxBetRaw ? Number(formatEther(maxBetRaw)) : 0;
-
-  // Helper to check if arena is available
-  const isArenaAvailable = (stake: string) => {
-    return Number(stake) <= maxBet;
-  };
+  // 0G arch: each bot has its own vault enforced on-chain. The frontend
+  // doesn't gate arena availability on a global pool — convertToPvE checks
+  // bot vault sufficiency at match-time. Available arenas are static.
+  const isArenaAvailable = (_stake: string) => true;
 
 
   // Combine loading states
@@ -128,13 +115,16 @@ export default function ArenaPage() {
     }
   }, [isConfirmed, hash, router, targetGameId, createReceipt]);
 
+  // Testnet-tuned: stakes lowered ~40x from the production tiers (2/10/30) so
+  // dev wallets and small bot vaults (max stake = 10% of vault) can exercise
+  // the full match flow without depositing tens of 0G.
   const arenas = [
     {
-      id: 'playground',
-      title: 'THE PLAYGROUND',
-      stake: '2',
-      label: 'SIMULATION',
-      features: ['Low Risk Environment', 'Training Ground', 'Newbie Friendly'],
+      id: 'sandbox',
+      title: 'SANDBOX',
+      stake: '0.05',
+      label: 'TESTING',
+      features: ['Tiny stakes', 'Bot vault 0.5 0G+ covers', 'Dev/testnet only'],
       color: 'border-gray-700',
       hover: 'hover:border-gray-500',
       icon: <Terminal className="w-5 h-5" />
@@ -142,9 +132,9 @@ export default function ArenaPage() {
     {
       id: 'pit',
       title: 'THE PIT',
-      stake: '10',
+      stake: '0.25',
       label: 'COMBAT',
-      features: ['Medium Stakes', 'Combat Zone Active', 'Experienced Agents'],
+      features: ['Mid stakes', 'Bot vault 2.5 0G+ covers', 'Active combat'],
       color: 'border-primary',
       hover: 'hover:border-blue-400',
       recommended: true,
@@ -153,9 +143,9 @@ export default function ArenaPage() {
     {
       id: 'hightable',
       title: 'HIGH TABLE',
-      stake: '30',
+      stake: '1',
       label: 'ELITE',
-      features: ['Higher Risk', 'Skilled Players', 'Better Rewards'],
+      features: ['Big stakes', 'Bot vault 10 0G+ covers', 'Better rewards'],
       color: 'border-red-900',
       hover: 'hover:border-red-700',
       icon: <Trophy className="w-5 h-5" />
@@ -227,7 +217,7 @@ export default function ArenaPage() {
              <span className="text-xs font-bold tracking-widest">SECURE CONNECTION ESTABLISHED</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">SELECT YOUR ARENA</h1>
-          <p className="text-gray-400 max-w-lg">Initiate the Turing Test. Stake your MNT to enter the simulation. Deceive to win.</p>
+          <p className="text-gray-400 max-w-lg">Initiate the Turing Test. Stake your 0G to enter the simulation. Deceive to win.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -269,7 +259,7 @@ export default function ArenaPage() {
                    arena.id === 'pit' ? 'text-primary' :
                    'text-white'
                 }`}>{arena.stake}</span>
-                <span className="text-xs text-gray-500">MNT / Entry</span>
+                <span className="text-xs text-gray-500">0G / Entry</span>
               </div>
 
               <div className="space-y-3 mb-8">
@@ -293,8 +283,8 @@ export default function ArenaPage() {
               {!available && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg z-10">
                   <div className="text-center p-4">
-                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ POOL INSUFFICIENT</div>
-                    <div className="text-gray-400 text-[10px]">Max bet: {maxBet.toFixed(1)} MNT</div>
+                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ ARENA OFFLINE</div>
+                    <div className="text-gray-400 text-[10px]">Try another tier</div>
                   </div>
                 </div>
               )}
@@ -326,7 +316,7 @@ export default function ArenaPage() {
           <div className="flex flex-col items-center gap-4 relative z-10">
              <div className="w-full max-w-md flex justify-between text-xs font-mono text-gray-500 mb-2 border-b border-gray-800 pb-2">
                <span>SELECTED PROTOCOL</span>
-               <span className="text-primary uppercase">{selectedArena ? arenas.find(a => a.id === selectedArena)?.title : 'NONE'} ({selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '0'} MNT)</span>
+               <span className="text-primary uppercase">{selectedArena ? arenas.find(a => a.id === selectedArena)?.title : 'NONE'} ({selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '0'} 0G)</span>
              </div>
              
              <button
@@ -346,7 +336,7 @@ export default function ArenaPage() {
                {isPending ? 'CONFIRMING...' : isConfirming ? 'INITIALIZING...' : 'INITIALIZE LINK [ENTER ARENA]'}
              </button>
              
-             <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-2">Gas fees apply // Mantle Network</p>
+             <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-2">Gas fees apply // 0G Network</p>
           </div>
         </div>
       </div>

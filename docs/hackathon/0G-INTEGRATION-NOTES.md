@@ -107,11 +107,33 @@ const [blob, dlErr] = await indexer.downloadToBlob(rootHash, { proof: true });
 - Files encrypted client-side before upload, auto-detect on download
 - **Critical for INFT bot prompt protection** — prompt never visible to anyone except bot owner + TEE during inference
 
-### Open questions
-- ❓ Cost per upload (no public pricing in docs)
-- ❓ File size limits
-- ❓ Difference between "Log" and "KV" layer in practice
-  → **Action:** ask Discord, or test empirically Day 2
+### Empirical numbers — Day 2 roundtrip test
+
+Test: Upload + download 532-byte JSON chat transcript on Galileo testnet.
+
+| Metric | Value |
+|---|---|
+| Indexer endpoint | `https://indexer-storage-testnet-turbo.0g.ai` |
+| Storage flow contract | `0x22e03a6a89b950f1c82ec5e74f8eca321a105296` (Galileo) |
+| Payload size | 532 bytes |
+| Upload latency | **10.7s** (slow — background-only, never block UX) |
+| Download latency | **1.8s** (fast — receipt UI works in user time) |
+| Upload cost | **0.00125 0G per ~500-byte blob** |
+| Round-trip integrity | ✓ MATCH |
+| Replication | 4 storage nodes hosting; 2 selected for download (random) |
+| Storage fee paid | 92,200,934,886 wei = ~9.2e-8 0G storage fee component |
+
+**Cost projection per match:** ~0.00125 0G untuk transcript. 100 test matches = 0.125 0G. Negligible.
+
+### Implications for our app
+
+- ✅ **Upload async, never block match flow** — 10s is fine post-match, hidden
+- ✅ **Download synchronous in receipt page** — 1.8s acceptable
+- ✅ **Cost is non-issue** — even thousands of matches stays under 1 0G
+- ⚠️ **No file size limit observed** — but tested only 532 bytes. Larger blobs may differ. Test ~5-10 KB before relying on it for memory state files.
+
+### Still open
+- ❓ KV layer (`@0gfoundation/0g-storage-ts-sdk` exports `kv` module) — we don't need it for hackathon scope; chat transcripts work fine on Log layer
 
 ---
 
@@ -285,16 +307,35 @@ await contract.mint(ownerAddress, storageResult.uri, storageResult.metadataHash)
 
 ---
 
-## 6. Action Items — Day 2
+## 6. Day 2 Action Items — Status
 
-| # | Task | Why |
+| # | Task | Status | Result |
+|---|---|---|---|
+| 1 | Install both SDKs | ✅ Done | Compute SDK 0.8.0 + Storage SDK 1.2.8 (CJS workaround for ESM bug) |
+| 2 | Compute provider catalog query | ✅ Done | Qwen 2.5 7B Instruct selected (provider `0xa48f...`) |
+| 3 | Storage upload+download roundtrip | ✅ Done | Works. 0.00125 0G/blob, 10.7s up / 1.8s down, integrity OK |
+| 4 | Hardhat config for 0G networks | ✅ Done | `zeroGTestnet` (16602) + `zeroGMainnet` (16661) configured |
+| 5 | Sanity deploy current contracts to Galileo | ✅ Done | OxHuman 0.0173 0G, HouseVault 0.0069 0G, EVM compat ✓ |
+| 6 | Inference latency benchmark | ⏳ Gated | Needs ≥1 0G in wallet for sub-account funding |
+| 7 | TEE attestation verification | ⏳ Gated | Same gate as #6 |
+| 8 | Discord follow-ups (ERC-7857 ref, oracle, fine-tuning) | ⏳ Pending | Awaiting reply on faucet ticket; will ask in same thread |
+
+### Mainnet deploy budget projection
+
+Based on testnet gas measurements:
+| Component | Estimated cost | Notes |
 |---|---|---|
-| 1 | Empirical test: install both SDKs, run hello-world inference + storage upload | Validate before committing arch |
-| 2 | Benchmark inference latency (target <2s per call) | Game UX requirement |
-| 3 | Query Compute provider list, pick model + provider for production | Need concrete model name in code |
-| 4 | Get testnet faucet x5 wallets (rotate daily) | Capital for testing |
-| 5 | Ask 0G Discord: ERC-7857 reference impl? Oracle service docs? Storage costs? | Unblock unknowns |
-| 6 | Write minimal Hardhat config for `zeroGTestnet` + `zeroGMainnet` | Day 8 deploy needs this |
+| Deploy `OxHuman.sol` | ~0.018 0G | Same complexity as Mantle ver |
+| Deploy `BotINFT.sol` (new ERC-7857) | ~0.020-0.030 0G | Slightly bigger than HouseVault |
+| Mint 5 personas | ~0.005-0.010 0G total | ERC-7857 mints may be more expensive than ERC-721 due to oracle setup |
+| Initial HouseVault funding | n/a | Dropped from 0G arch |
+| Test transactions (10-20) | ~0.05 0G | Stake + match + resolve cycles |
+| **Mainnet total** | **~0.10-0.15 0G** | Comfortable budget |
+
+### Galileo deployed addresses (sanity, throwaway)
+- OxHuman: `0x062f1923Deb717A5d8D3e9Ed0e8C69b3eB63BC5f`
+- HouseVault: `0x583904b082975E4cb4286611356718D7E76b7894`
+- These are **for sanity test only** — final architecture will redeploy with `BotINFT` and dropped `HouseVault`.
 
 ---
 

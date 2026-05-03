@@ -592,25 +592,32 @@ async function startMatchmakerTimer(gameId: number, stake: bigint): Promise<void
         }
 
         try {
+            // Kick off the on-chain convert and the off-chain bot-prep in parallel.
+            // Memory load from 0G Storage takes ~10-15s; tx confirmation also takes
+            // ~5-10s. Running them concurrently saves a lot of dead time before the
+            // bot can greet.
+            const slug = personaSlugForBot(tokenId);
+            const memoryPromise = loadBotMemory(tokenId);
+            const gameOnChainPromise = getGameOnChain(gameId);
+
             const tx = await oxhuman.convertToPvE(BigInt(gameId), BigInt(tokenId));
+            const [memory, game] = await Promise.all([memoryPromise, gameOnChainPromise]);
             await tx.wait();
             console.log(`🤖 Game ${gameId}: converted to PvE with bot ${tokenId}`);
 
-            // Bind a BotSession for this match
-            const memory = await loadBotMemory(tokenId);
-            const slug = personaSlugForBot(tokenId);
-            const game = await getGameOnChain(gameId);
             const opponent = (game.player1 as string).toLowerCase();
-
             const session = createBotSession({ personaSlug: slug, memory, opponent });
             state.botTokenId = tokenId;
             state.botSession = session;
 
-            // Tell connected players the match is now live (still blind — they don't know it's a bot)
+            // Tell the frontend that the bot is ready to chat. The frontend
+            // delays the 60s match timer until this fires so memory-loading
+            // latency doesn't burn through visible turn time.
             io.to(gameId.toString()).emit('opponent_joined', {
                 gameId,
                 message: 'A new entity has entered the arena.',
             });
+            io.to(gameId.toString()).emit('bot_ready', { gameId });
 
             // Bot greets after a human-ish delay
             setTimeout(() => sendBotReply(gameId, '__OPENER__'), 5000 + Math.random() * 3000);

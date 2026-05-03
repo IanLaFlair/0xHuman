@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount, useSignMessage, usePublicClient, useChainId } from 'wagmi';
+import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
+import BotINFTABI from '@/contracts/BotINFTABI.json';
 import { useGameStatus, useJoinGame, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
 import { formatEther, keccak256, encodePacked, toHex } from 'viem';
 import TransactionOverlay from './TransactionOverlay';
@@ -50,6 +52,8 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
   interface PersonaReveal { name: string; tagline?: string; color?: string; custom?: boolean }
   const [reveal, setReveal] = useState<RevealPayload | null>(null);
   const [personaReveal, setPersonaReveal] = useState<PersonaReveal | null>(null);
+  const publicClient = usePublicClient();
+  const chainIdLive = useChainId();
 
   // Derive result info from gameData
   // 0G struct: [player1, player2, botTokenId, stake, status, mode, winner, timestamp,
@@ -143,6 +147,16 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
     });
     
     // Listen for game resolution with txHash
+    socket.on("bot_ready", (data: { gameId: number }) => {
+        // Reset the match timer to a fresh 60s window once the bot is actually
+        // ready to chat. Server emits this after BotSession is constructed
+        // (memory loaded from 0G Storage etc), so the visible turn time isn't
+        // eaten by infrastructure latency.
+        console.log("Bot ready for game", data.gameId);
+        setGameStartTime(Date.now());
+        setTimeLeft(60);
+    });
+
     socket.on("gameResolved", (data: { gameId: number, txHash: string, reveal?: RevealPayload }) => {
         console.log("Game resolved! TX:", data.txHash, "reveal:", data.reveal);
         setResolutionTxHash(data.txHash);
@@ -175,6 +189,53 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
       socket.disconnect();
     };
   }, [arenaId, address]);
+
+  // Fallback reveal lookup — when the finished view renders without reveal data
+  // (e.g. socket missed the gameResolved event due to refresh), reconstruct it
+  // from on-chain state: read game.botTokenId, fetch the bot's personalityHash,
+  // ask the backend persona-by-hash endpoint, and populate the reveal card.
+  useEffect(() => {
+    if (gameState !== 'finished') return;
+    if (!gameData || !publicClient) return;
+    if (reveal) return; // already have it from socket
+
+    const g = gameData as any;
+    const tokenId = Number(g[2] ?? 0);
+    const isPvEViaIndex = Boolean(g[8]); // isPlayer2Bot
+    if (tokenId === 0 || !isPvEViaIndex) {
+      setReveal({ wasPvE: false });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const botAddr = (() => {
+          try { return getAddresses(chainIdLive).BotINFT; } catch { return getAddresses(DEFAULT_CHAIN_ID).BotINFT; }
+        })();
+        const bot = await publicClient.readContract({
+          address: botAddr,
+          abi: BotINFTABI,
+          functionName: 'bots',
+          args: [BigInt(tokenId)],
+        }) as any;
+        if (cancelled) return;
+        const personalityHash = String(bot[0]).toLowerCase();
+
+        const wsUrl = (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'))
+          ? window.location.origin
+          : 'http://localhost:3001';
+        const r = await fetch(`${wsUrl}/api/personas/by-hash?h=${personalityHash}`);
+        if (!r.ok || cancelled) return;
+        const meta = await r.json();
+        setReveal({ wasPvE: true, botTokenId: tokenId, personaSlug: meta.slug });
+        setPersonaReveal({ name: meta.name, tagline: meta.tagline, color: meta.color, custom: meta.custom });
+      } catch (e) {
+        console.warn('reveal fallback failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gameState, gameData, publicClient, chainIdLive, reveal]);
 
   // Sync Game State
   useEffect(() => {

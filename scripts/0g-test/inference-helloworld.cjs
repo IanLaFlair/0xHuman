@@ -37,7 +37,7 @@ if (fs.existsSync(envPath)) {
 
 const RPC_URL = 'https://evmrpc-testnet.0g.ai';
 const PROVIDER_ADDRESS = '0xa48f01287233509FD694a22Bf840225062E67836'; // Qwen 2.5 7B
-const FUND_AMOUNT = '0.5'; // 0G to add to sub-account (in 0G units)
+const FUND_AMOUNT = process.env.FUND_AMOUNT || '0.1'; // 0G to add to sub-account
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 if (!PRIVATE_KEY) {

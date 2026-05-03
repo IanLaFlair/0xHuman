@@ -184,8 +184,18 @@ const isValid = await broker.inference.processResponse(providerAddress, chatID);
 |---|---|---|
 | Rate limit | 30 req/min per user | Sufficient for ~30 concurrent matches at 1 turn/match/min |
 | Concurrent | 5 max | Need queue if matches > 5 |
-| Min balance | 1 0G per provider sub-account | Backend wallet needs preloaded balance |
-| Latency | Not specified | ⚠️ Must benchmark Day 2 — game needs <2s for UX |
+| **Ledger minimum** | **3 0G hard minimum** (on-chain enforced) | ⚠️ **HARD BLOCKER**: must have ≥3 0G in wallet before any inference call. `broker.ledger.depositFund(3)` required to bootstrap ledger. |
+| Latency | Not specified | ⚠️ Must benchmark — game needs <2s for UX |
+
+### ⚠️ Day 2 inference test blocked
+
+Attempted hello-world with 0.268 0G balance + FUND_AMOUNT 0.1 0G → contract reverted with:
+> *"No ledger exists yet. depositFund will create one, but the contract requires a minimum of 3 0G."*
+
+Daily faucet 0.1 0G/wallet/day = 27 days to reach 3 0G. **Discord bulk faucet allocation is the only path to unblock.** Until then:
+- Inference integration uses mock provider in dev (`lib/0g-compute.ts` exposes `mockMode` flag)
+- Real TEE attestation validation deferred to once ledger is bootstrapped
+- Pitch language stays "TEE-attested" (validated via SDK docs); empirical verification only confirms pricing & latency
 
 ### Available models — confirmed Day 2 (Galileo testnet)
 

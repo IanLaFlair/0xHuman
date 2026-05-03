@@ -34,12 +34,19 @@ export default function CreateBotPage() {
     const chainId = useChainId();
     const router = useRouter();
 
+    const [mode, setMode] = useState<'template' | 'custom'>('template');
     const [personas, setPersonas] = useState<Persona[]>([]);
     const [selected, setSelected] = useState<string | null>(null);
     const [slot, setSlot] = useState<SlotChoice>(1);
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<{ uri: string; hash: string; rootHash: string } | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // Custom-mode state
+    const [customName, setCustomName] = useState('');
+    const [customTagline, setCustomTagline] = useState('');
+    const [customColor, setCustomColor] = useState('#7C7AED');
+    const [customPrompt, setCustomPrompt] = useState('');
 
     const botAddr = (() => {
         try { return getAddresses(chainId).BotINFT; } catch { return getAddresses(DEFAULT_CHAIN_ID).BotINFT; }
@@ -73,22 +80,36 @@ export default function CreateBotPage() {
     }, [slotsOwned]);
 
     async function handleMint() {
-        if (!selected) {
-            setError('Pick a persona first');
-            return;
-        }
         if (!isConnected || !address) {
             setError('Connect your wallet');
             return;
+        }
+        if (mode === 'template' && !selected) {
+            setError('Pick a persona first');
+            return;
+        }
+        if (mode === 'custom') {
+            if (!customName.trim()) { setError('Custom bot needs a name'); return; }
+            if (customPrompt.trim().length < 50) { setError('Custom prompt should be at least 50 chars'); return; }
+            if (customPrompt.length > 4000) { setError('Custom prompt is too long (4000 char max)'); return; }
         }
         setError(null);
         setUploading(true);
 
         try {
-            const resp = await fetch(`${WS_URL}/api/personas/upload`, {
+            const endpoint = mode === 'custom' ? '/api/personas/upload-custom' : '/api/personas/upload';
+            const body = mode === 'custom'
+                ? {
+                      name: customName.trim(),
+                      tagline: customTagline.trim() || undefined,
+                      color: customColor,
+                      systemPrompt: customPrompt.trim(),
+                  }
+                : { slug: selected };
+            const resp = await fetch(`${WS_URL}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slug: selected }),
+                body: JSON.stringify(body),
             });
             if (!resp.ok) {
                 const e = await resp.json();
@@ -148,39 +169,126 @@ export default function CreateBotPage() {
                     </p>
                 </div>
 
-                {/* Persona picker */}
-                <div className="mb-10">
-                    <h2 className="text-sm font-bold tracking-widest text-gray-500 uppercase mb-4">1. Choose persona</h2>
-                    {personas.length === 0 ? (
-                        <div className="text-gray-500">Loading personas…</div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                            {personas.map((p) => (
-                                <button
-                                    key={p.slug}
-                                    onClick={() => setSelected(p.slug)}
-                                    className={`group relative rounded-lg border-2 p-4 text-left transition-all ${
-                                        selected === p.slug
-                                            ? 'border-primary bg-primary/10'
-                                            : 'border-gray-800 hover:border-gray-600 bg-black/40'
-                                    }`}
-                                >
-                                    <div
-                                        className="w-12 h-12 rounded-full mb-3 flex items-center justify-center font-bold text-black"
-                                        style={{ background: p.color ?? '#7C7C7C' }}
-                                    >
-                                        {p.name.slice(0, 2)}
-                                    </div>
-                                    <div className="font-bold mb-1">{p.name}</div>
-                                    <div className="text-xs text-gray-400">{p.tagline}</div>
-                                    {selected === p.slug && (
-                                        <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-primary" />
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                {/* Mode toggle */}
+                <div className="mb-6 inline-flex rounded-lg border border-gray-800 bg-black/40 overflow-hidden">
+                    <button
+                        onClick={() => setMode('template')}
+                        className={`px-5 py-2 text-sm font-bold tracking-wider uppercase transition ${mode === 'template' ? 'bg-primary text-black' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Template
+                    </button>
+                    <button
+                        onClick={() => setMode('custom')}
+                        className={`px-5 py-2 text-sm font-bold tracking-wider uppercase transition ${mode === 'custom' ? 'bg-primary text-black' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Custom
+                    </button>
                 </div>
+
+                {/* Template / Custom panel */}
+                {mode === 'template' ? (
+                    <div className="mb-10">
+                        <h2 className="text-sm font-bold tracking-widest text-gray-500 uppercase mb-4">1. Choose persona</h2>
+                        {personas.length === 0 ? (
+                            <div className="text-gray-500">Loading personas…</div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                                {personas.map((p) => (
+                                    <button
+                                        key={p.slug}
+                                        onClick={() => setSelected(p.slug)}
+                                        className={`group relative rounded-lg border-2 p-4 text-left transition-all ${
+                                            selected === p.slug
+                                                ? 'border-primary bg-primary/10'
+                                                : 'border-gray-800 hover:border-gray-600 bg-black/40'
+                                        }`}
+                                    >
+                                        <div
+                                            className="w-12 h-12 rounded-full mb-3 flex items-center justify-center font-bold text-black"
+                                            style={{ background: p.color ?? '#7C7C7C' }}
+                                        >
+                                            {p.name.slice(0, 2)}
+                                        </div>
+                                        <div className="font-bold mb-1">{p.name}</div>
+                                        <div className="text-xs text-gray-400">{p.tagline}</div>
+                                        {selected === p.slug && (
+                                            <CheckCircle2 className="absolute top-2 right-2 w-4 h-4 text-primary" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="mb-10 space-y-4">
+                        <h2 className="text-sm font-bold tracking-widest text-gray-500 uppercase">1. Author your persona</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-[10px] tracking-widest uppercase text-gray-500 mb-2 block">Name</label>
+                                <input
+                                    type="text"
+                                    maxLength={32}
+                                    value={customName}
+                                    onChange={(e) => setCustomName(e.target.value)}
+                                    placeholder="e.g. Pixel"
+                                    className="w-full bg-black border border-gray-700 px-3 py-2 rounded text-sm font-mono"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="text-[10px] tracking-widest uppercase text-gray-500 mb-2 block">Tagline</label>
+                                <input
+                                    type="text"
+                                    maxLength={120}
+                                    value={customTagline}
+                                    onChange={(e) => setCustomTagline(e.target.value)}
+                                    placeholder="One-line vibe ('grumpy night-owl coder')"
+                                    className="w-full bg-black border border-gray-700 px-3 py-2 rounded text-sm font-mono"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] tracking-widest uppercase text-gray-500 mb-2 block">Color</label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="color"
+                                    value={customColor}
+                                    onChange={(e) => setCustomColor(e.target.value)}
+                                    className="w-12 h-10 bg-transparent border border-gray-700 rounded cursor-pointer"
+                                />
+                                <input
+                                    type="text"
+                                    value={customColor}
+                                    onChange={(e) => setCustomColor(e.target.value)}
+                                    className="w-32 bg-black border border-gray-700 px-3 py-2 rounded text-sm font-mono"
+                                />
+                                <div
+                                    className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-black"
+                                    style={{ background: customColor }}
+                                >
+                                    {customName.slice(0, 2) || '??'}
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-[10px] tracking-widest uppercase text-gray-500 mb-2 block flex items-center justify-between">
+                                <span>System prompt (the bot's personality)</span>
+                                <span className={`${customPrompt.length > 4000 ? 'text-red-400' : 'text-gray-600'}`}>
+                                    {customPrompt.length} / 4000
+                                </span>
+                            </label>
+                            <textarea
+                                rows={10}
+                                value={customPrompt}
+                                onChange={(e) => setCustomPrompt(e.target.value)}
+                                placeholder={"You are [name]. You're [age], [vibe]. Don't admit you're an AI...\n\nStyle:\n- short replies (1-2 sentences)\n- casual lowercase\n- if asked math, deflect ('do i look like wolfram alpha to u')\n\nIf accused of being a bot: [your tactic]"}
+                                className="w-full bg-black border border-gray-700 px-3 py-2 rounded text-sm font-mono leading-relaxed"
+                            />
+                            <p className="text-[10px] text-gray-500 mt-2">
+                                Tip: tell the bot how to handle math, accusations, slang. Encrypted before upload — only TEE inference providers see it.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Slot picker */}
                 <div className="mb-10">
@@ -228,7 +336,14 @@ export default function CreateBotPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-6">
                         <div>
                             <div className="text-xs text-gray-500 mb-1">Persona</div>
-                            <div className="font-bold">{selected ? personas.find((p) => p.slug === selected)?.name : '—'}</div>
+                            <div className="font-bold">
+                                {mode === 'custom'
+                                    ? (customName.trim() || '—')
+                                    : (selected ? personas.find((p) => p.slug === selected)?.name : '—')}
+                                {mode === 'custom' && customName.trim() && (
+                                    <span className="ml-2 text-[10px] font-bold text-purple-300">CUSTOM</span>
+                                )}
+                            </div>
                         </div>
                         <div>
                             <div className="text-xs text-gray-500 mb-1">Slot</div>
@@ -255,7 +370,7 @@ export default function CreateBotPage() {
                     ) : (
                         <button
                             onClick={handleMint}
-                            disabled={!selected || uploading || isPending || isConfirming}
+                            disabled={(mode === 'template' && !selected) || uploading || isPending || isConfirming}
                             className="w-full py-4 rounded bg-primary text-black font-bold tracking-widest uppercase text-sm hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                         >
                             {uploading ? (

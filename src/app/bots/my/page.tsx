@@ -31,6 +31,7 @@ interface PersonaMeta {
     name: string;
     tagline?: string;
     color?: string;
+    custom?: boolean;
 }
 
 export default function MyBotsPage() {
@@ -38,7 +39,7 @@ export default function MyBotsPage() {
     const chainId = useChainId();
     const publicClient = usePublicClient();
     const [bots, setBots] = useState<BotEntry[]>([]);
-    const [personasMeta, setPersonasMeta] = useState<PersonaMeta[]>([]);
+    const [hashMeta, setHashMeta] = useState<Record<string, PersonaMeta>>({});
     const [loading, setLoading] = useState(false);
 
     const botAddr = (() => {
@@ -50,13 +51,6 @@ export default function MyBotsPage() {
         abi: BotINFTABI,
         functionName: 'nextTokenId',
     });
-
-    useEffect(() => {
-        fetch(`${WS_URL}/api/personas/list`)
-            .then((r) => r.json())
-            .then((d) => setPersonasMeta(d.personas ?? []))
-            .catch(() => setPersonasMeta([]));
-    }, []);
 
     useEffect(() => {
         async function loadBots() {
@@ -97,9 +91,28 @@ export default function MyBotsPage() {
                 }
             }
             setBots(found);
+
+            // Resolve each bot's persona via backend hash lookup
+            const updates: Record<string, PersonaMeta> = {};
+            await Promise.all(found.map(async (b) => {
+                const h = b.personalityHash.toLowerCase();
+                if (hashMeta[h]) return;
+                try {
+                    const r = await fetch(`${WS_URL}/api/personas/by-hash?h=${h}`);
+                    if (!r.ok) return;
+                    const meta = await r.json();
+                    updates[h] = meta;
+                } catch {
+                    // best-effort
+                }
+            }));
+            if (Object.keys(updates).length > 0) {
+                setHashMeta((prev) => ({ ...prev, ...updates }));
+            }
             setLoading(false);
         }
         loadBots();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [address, nextTokenId, publicClient, botAddr]);
 
     return (
@@ -148,7 +161,7 @@ export default function MyBotsPage() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {bots.map((b) => (
-                            <BotCard key={String(b.tokenId)} bot={b} botAddr={botAddr} personas={personasMeta} />
+                            <BotCard key={String(b.tokenId)} bot={b} botAddr={botAddr} hashMeta={hashMeta} />
                         ))}
                     </div>
                 )}
@@ -157,18 +170,15 @@ export default function MyBotsPage() {
     );
 }
 
-function BotCard({ bot, botAddr, personas }: { bot: BotEntry; botAddr: `0x${string}`; personas: PersonaMeta[] }) {
+function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${string}`; hashMeta: Record<string, PersonaMeta> }) {
     const { writeContract, data: hash, isPending } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
     const [showActions, setShowActions] = useState(false);
     const [depositAmount, setDepositAmount] = useState('');
     const [withdrawAmount, setWithdrawAmount] = useState('');
 
-    // Find persona metadata by hash matching — for hackathon we map tokenId
-    // to the order of mint, which is approximate. Better matching would
-    // require an off-chain index keyed by URI.
-    const personaIdx = (Number(bot.tokenId) - 1) % personas.length;
-    const persona = personas[personaIdx];
+    // Resolve persona by personalityHash via the backend hashmap
+    const persona = hashMeta[bot.personalityHash.toLowerCase()];
 
     const totalMatches = bot.wins + bot.losses;
     const winRatePct = totalMatches > 0n ? Number((bot.wins * 10000n) / totalMatches) / 100 : 0;
@@ -215,16 +225,27 @@ function BotCard({ bot, botAddr, personas }: { bot: BotEntry; botAddr: `0x${stri
                         {persona?.name?.slice(0, 2) ?? `#${bot.tokenId}`}
                     </div>
                     <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="font-bold text-lg">{persona?.name ?? `Bot #${bot.tokenId}`}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${bot.tier === 1 ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
                                 {tierLabel}
                             </span>
+                            {persona?.custom && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">CUSTOM</span>
+                            )}
                         </div>
-                        <div className="text-xs text-gray-400 mb-1">{persona?.tagline}</div>
-                        <Link href={`/bots/${bot.tokenId}`} className="text-[10px] text-gray-500 hover:text-primary">
-                            Token #{String(bot.tokenId)} • Slot {bot.slot}
-                        </Link>
+                        <div className="text-xs text-gray-400 mb-2">{persona?.tagline ?? '— persona not indexed —'}</div>
+                        <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                            <span>Token #{String(bot.tokenId)} • Slot {bot.slot}</span>
+                            <a
+                                href={`https://chainscan-galileo.0g.ai/token/${botAddr}?a=${bot.tokenId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-primary inline-flex items-center gap-1"
+                            >
+                                Explorer <ExternalLink className="w-3 h-3" />
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

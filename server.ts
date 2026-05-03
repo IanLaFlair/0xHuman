@@ -125,6 +125,73 @@ const botContract = new ethers.Contract(BOTINFT_ADDRESS, botAbi, resolverWallet)
 const storageCfg: StorageConfig = storageConfigFromPrivateKey(RESOLVER_PRIVATE_KEY, NETWORK);
 const personaKey = PERSONA_KEY_HEX ? Buffer.from(PERSONA_KEY_HEX, 'hex') : null;
 
+// ============ Hash → persona-meta lookup ============
+
+interface PersonaMeta {
+    slug: string;          // 'mochi' | 'skibidi' | ... | 'custom'
+    name: string;
+    tagline?: string;
+    color?: string;
+    custom: boolean;
+}
+
+const HASH_MAP_PATH = path.resolve(process.cwd(), 'data/_persona-hashmap.json');
+const hashToMeta = new Map<string, PersonaMeta>();
+
+function loadHashMap(): void {
+    if (!fs.existsSync(HASH_MAP_PATH)) return;
+    try {
+        const raw = JSON.parse(fs.readFileSync(HASH_MAP_PATH, 'utf8'));
+        for (const [k, v] of Object.entries(raw)) hashToMeta.set(k.toLowerCase(), v as PersonaMeta);
+    } catch {
+        // ignore corrupt file
+    }
+}
+
+function persistHashMap(): void {
+    const obj: Record<string, PersonaMeta> = {};
+    for (const [k, v] of hashToMeta.entries()) obj[k] = v;
+    fs.writeFileSync(HASH_MAP_PATH, JSON.stringify(obj, null, 2));
+}
+
+function recordHashMapping(hash: string, meta: PersonaMeta): void {
+    hashToMeta.set(hash.toLowerCase(), meta);
+    persistHashMap();
+}
+
+function lookupHashMapping(hash: string): PersonaMeta | null {
+    return hashToMeta.get(hash.toLowerCase()) ?? null;
+}
+
+/**
+ * Pre-populate hashes for built-in personas at boot so /bots/my can resolve
+ * them even before someone hits /api/personas/upload.
+ */
+function seedBuiltInPersonas(): void {
+    for (const slug of listAvailablePersonas()) {
+        try {
+            const filePath = path.resolve(process.cwd(), `data/personas/${slug}.json`);
+            const persona = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const hash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(persona))).toLowerCase();
+            if (!hashToMeta.has(hash)) {
+                hashToMeta.set(hash, {
+                    slug,
+                    name: persona.name,
+                    tagline: persona.tagline,
+                    color: persona.color,
+                    custom: false,
+                });
+            }
+        } catch (e) {
+            console.warn(`seedBuiltInPersonas(${slug}) failed:`, (e as Error).message);
+        }
+    }
+    persistHashMap();
+}
+
+loadHashMap();
+seedBuiltInPersonas();
+
 // ============ Match state ============
 
 interface MatchTranscriptEntry {
@@ -268,6 +335,7 @@ const httpServer = createServer((req, res) => {
                 const upload = await uploadEncrypted(storageCfg, persona, personaKey);
                 const uri = `og-storage://${upload.rootHash}`;
                 const hash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(persona)));
+                recordHashMapping(hash, { slug, name: persona.name, tagline: persona.tagline, color: persona.color, custom: false });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ uri, hash, rootHash: upload.rootHash, txHash: upload.txHash }));
             } catch (e: any) {
@@ -275,6 +343,69 @@ const httpServer = createServer((req, res) => {
                 res.end(JSON.stringify({ error: e.message ?? 'Upload failed' }));
             }
         });
+        return;
+    }
+
+    // POST /api/personas/upload-custom — accept user-authored persona, encrypt + upload, return URI + hash
+    if (req.method === 'POST' && url.pathname === '/api/personas/upload-custom') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', async () => {
+            try {
+                const { name, tagline, color, systemPrompt, voiceParameters } = JSON.parse(body);
+                if (!name || !systemPrompt) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'name and systemPrompt are required' }));
+                    return;
+                }
+                if (typeof systemPrompt !== 'string' || systemPrompt.length > 4000) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'systemPrompt must be 1..4000 chars' }));
+                    return;
+                }
+                if (!personaKey) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'PERSONA_KEY not configured on server' }));
+                    return;
+                }
+                const persona = {
+                    name: String(name).slice(0, 32),
+                    tagline: String(tagline ?? '').slice(0, 120),
+                    color: typeof color === 'string' ? color.slice(0, 16) : '#7C7C7C',
+                    avatar: undefined,
+                    systemPrompt,
+                    voiceParameters: voiceParameters ?? { temperature: 0.85, maxTokens: 80 },
+                };
+                const upload = await uploadEncrypted(storageCfg, persona, personaKey);
+                const uri = `og-storage://${upload.rootHash}`;
+                const hash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(persona)));
+                recordHashMapping(hash, { slug: 'custom', name: persona.name, tagline: persona.tagline, color: persona.color, custom: true });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ uri, hash, rootHash: upload.rootHash, txHash: upload.txHash }));
+            } catch (e: any) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message ?? 'Upload failed' }));
+            }
+        });
+        return;
+    }
+
+    // GET /api/personas/by-hash?h=<hash> — resolve a personalityHash to its persona meta
+    if (req.method === 'GET' && url.pathname === '/api/personas/by-hash') {
+        const hash = url.searchParams.get('h')?.toLowerCase();
+        if (!hash) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing h' }));
+            return;
+        }
+        const meta = lookupHashMapping(hash);
+        if (!meta) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No persona known for that hash' }));
+            return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(meta));
         return;
     }
 

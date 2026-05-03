@@ -165,15 +165,30 @@ const isValid = await broker.inference.processResponse(providerAddress, chatID);
 | Min balance | 1 0G per provider sub-account | Backend wallet needs preloaded balance |
 | Latency | Not specified | ⚠️ Must benchmark Day 2 — game needs <2s for UX |
 
-### Available models
-**Dynamic catalog** — must query at runtime:
-```ts
-const services = await broker.inference.listService();
-```
-Or via web UI: `pc.0g.ai` / `compute-marketplace.0g.ai/inference`
-Or CLI: `0g-compute-cli inference list-providers`
+### Available models — confirmed Day 2 (Galileo testnet)
 
-**Action Day 2:** Query catalog, pick model with right speed/quality tradeoff. Likely candidates: Llama 3 8B, DeepSeek Chat. Document chosen provider address + model in this file.
+Empirical query via `broker.inference.listService()` returned 2 active providers:
+
+| # | Provider Address | Model | Service | URL | Input price (wei/tok) | Output price (wei/tok) |
+|---|---|---|---|---|---|---|
+| 1 | `0xa48f01287233509FD694a22Bf840225062E67836` | **qwen/qwen-2.5-7b-instruct** | chatbot | compute-network-6.integratenetwork.work | 50,000,000,000 | 100,000,000,000 |
+| 2 | `0x4b2a941929E39Adbea5316dDF2B9Bd8Ff3134389` | qwen/qwen-image-edit-2511 | image-editing | compute-network-17.integratenetwork.work | 0 | 5,000,000,000,000,000 |
+
+**🎯 Production choice:** Provider #1 (Qwen 2.5 7B Instruct chatbot).
+
+**Cost per match (estimate):**
+- Input: ~100 tokens × 5e10 wei = 5e-6 0G ≈ negligible
+- Output: ~50 tokens × 1e11 wei = 5e-6 0G ≈ negligible
+- Per turn: ~1e-5 0G ≈ negligible
+- Per match (8 turns): ~1e-4 0G ≈ negligible
+- **Inference cost is essentially free per match. The 1 0G minimum is sub-account funding, not per-call cost.**
+
+**Latency benchmarks (Day 2):**
+- Broker init: ~1000ms (one-time)
+- `listService()`: ~321ms
+- `listServiceWithDetail()`: ~5770ms (slower — fetches health metrics)
+
+**SDK gotcha:** ESM build of `@0gfoundation/0g-compute-ts-sdk@0.8.0` has a packaging bug (`./index-33b65b9f.js does not provide an export named 'C'`). **Workaround:** import via CommonJS (`require()`) or write integration scripts as `.cjs`. Main app (Next.js) bundling may not hit this; needs verification. — TODO: file issue with 0G team.
 
 ### Settlement (separate from verification)
 - Fees accumulate per provider sub-account

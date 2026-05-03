@@ -1,0 +1,140 @@
+[
+  {
+    "provider": "0xa48f01287233509FD694a22Bf840225062E67836",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-6.integratenetwork.work",
+    "inputPrice": "50000000000",
+    "outputPrice": "100000000000",
+    "updatedAt": "1777372525",
+    "model": "qwen/qwen-2.5-7b-instruct",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"aliyun\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.8\"}",
+    "teeSignerAddress": "0x83df4B8EbA7c0B3B740019b8c9a77ffF77D508cF",
+    "teeSignerAcknowledged": true,
+    "healthMetrics": {
+      "status": "healthy",
+      "uptime": 100,
+      "avgResponseTime": 1274,
+      "lastCheck": "2026-05-03T05:06:35.691Z"
+    },
+    "modelInfo": {
+      "id": "qwen/qwen-2.5-7b-instruct",
+      "object": "model",
+      "created": 1777372525,
+      "owned_by": "0G Foundation",
+      "name": "Qwen2.5-7B-Instruct",
+      "description": "Alibaba's Qwen2.5-7B-Instruct is a 7B-parameter dense instruction-tuned LLM with 128K context window and strong multilingual support (29+ languages). Good at coding, math, structured output, and tool calling.",
+      "type": "chatbot",
+      "context_length": 32768,
+      "max_completion_tokens": 8192,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ],
+        "tokenizer": "qwen-bpe"
+      },
+      "supported_parameters": [
+        "temperature",
+        "top_p",
+        "top_k",
+        "max_tokens",
+        "presence_penalty",
+        "seed",
+        "stop",
+        "stream",
+        "tools",
+        "tool_choice",
+        "response_format"
+      ],
+      "default_parameters": {
+        "temperature": 0.7,
+        "top_p": 0.8
+      },
+      "pricing": {
+        "prompt": "50000000000",
+        "completion": "100000000000"
+      },
+      "verifiability": "TeeML",
+      "tee_attested": true,
+      "tee_type": "TDX",
+      "tee_verifier": "dstack",
+      "provider_type": "centralized",
+      "provider_identity": "aliyun",
+      "rate_limits": {
+        "requests_per_minute": 10,
+        "tokens_per_minute": 30000
+      },
+      "provider": "0xa48f01287233509FD694a22Bf840225062E67836"
+    }
+  },
+  {
+    "provider": "0x4b2a941929E39Adbea5316dDF2B9Bd8Ff3134389",
+    "serviceType": "image-editing",
+    "url": "https://compute-network-17.integratenetwork.work",
+    "inputPrice": "0",
+    "outputPrice": "5000000000000000",
+    "updatedAt": "1774854848",
+    "model": "qwen/qwen-image-edit-2511",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.7\"}",
+    "teeSignerAddress": "0x2A94D671f1A5e080f75A8164087Cdd35c8442e69",
+    "teeSignerAcknowledged": true,
+    "healthMetrics": {
+      "status": "healthy",
+      "uptime": 100,
+      "avgResponseTime": 20268,
+      "lastCheck": "2026-05-03T05:06:54.595Z"
+    },
+    "modelInfo": {
+      "id": "qwen/qwen-image-edit-2511",
+      "object": "model",
+      "created": 1774854848,
+      "owned_by": "0G Foundation",
+      "name": "qwen/qwen-image-edit-2511",
+      "description": "Async image editing model supporting multimodal input (image and text) for targeted visual modifications.",
+      "type": "image-editing",
+      "context_length": 2048,
+      "architecture": {
+        "modality": "image,text->image",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "supported_parameters": [
+        "prompt",
+        "image",
+        "n",
+        "size",
+        "response_format"
+      ],
+      "supported_formats": [
+        "openai"
+      ],
+      "default_parameters": {
+        "n": 1,
+        "size": "1024x1024"
+      },
+      "pricing": {
+        "prompt": "0",
+        "completion": "5000000000000000",
+        "image": "5000000000000000"
+      },
+      "verifiability": "TeeML",
+      "tee_attested": true,
+      "tee_type": "TDX",
+      "tee_verifier": "dstack",
+      "rate_limits": {
+        "requests_per_minute": 30
+      },
+      "provider": "0x4b2a941929E39Adbea5316dDF2B9Bd8Ff3134389"
+    }
+  }
+]

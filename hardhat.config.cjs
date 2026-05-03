@@ -49,5 +49,15 @@ module.exports = {
       accounts: accountsConfig,
       chainId: 5000,
     },
+    zeroGTestnet: {
+      url: "https://evmrpc-testnet.0g.ai",
+      accounts: accountsConfig,
+      chainId: 16602,
+    },
+    zeroGMainnet: {
+      url: "https://evmrpc.0g.ai",
+      accounts: accountsConfig,
+      chainId: 16661,
+    },
   },
 };

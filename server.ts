@@ -216,6 +216,68 @@ const httpServer = createServer((req, res) => {
         }
     }
 
+    // GET /api/personas/list — public catalog (no system prompts)
+    if (req.method === 'GET' && url.pathname === '/api/personas/list') {
+        try {
+            const slugs = listAvailablePersonas();
+            const personas = slugs.map((slug) => {
+                const filePath = path.resolve(process.cwd(), `data/personas/${slug}.json`);
+                const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                // Return only public fields — system prompt stays server-side
+                return {
+                    slug,
+                    name: raw.name,
+                    tagline: raw.tagline,
+                    color: raw.color,
+                    avatar: raw.avatar,
+                };
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ personas }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to list personas' }));
+        }
+        return;
+    }
+
+    // POST /api/personas/upload — encrypt + upload a persona by slug, return URI + hash
+    if (req.method === 'POST' && url.pathname === '/api/personas/upload') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', async () => {
+            try {
+                const { slug } = JSON.parse(body);
+                if (!slug || typeof slug !== 'string') {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Missing slug' }));
+                    return;
+                }
+                if (!personaKey) {
+                    res.writeHead(503, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'PERSONA_KEY not configured on server' }));
+                    return;
+                }
+                const filePath = path.resolve(process.cwd(), `data/personas/${slug}.json`);
+                if (!fs.existsSync(filePath)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: `Persona ${slug} not found` }));
+                    return;
+                }
+                const persona = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                const upload = await uploadEncrypted(storageCfg, persona, personaKey);
+                const uri = `og-storage://${upload.rootHash}`;
+                const hash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(persona)));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ uri, hash, rootHash: upload.rootHash, txHash: upload.txHash }));
+            } catch (e: any) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message ?? 'Upload failed' }));
+            }
+        });
+        return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/register-referral') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));

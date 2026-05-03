@@ -154,6 +154,33 @@ contract OxHuman {
         emit GameJoined(gameId, msg.sender, 0);
     }
 
+    /**
+     * @notice Resolver converts an Open PvP game into Active PvE by binding a
+     *         BotINFT to it. Used by the matchmaker after a wait window expires
+     *         without a human opponent — preserves blind matchmaking by letting
+     *         the player issue createGame() (PvP intent) and only on the backend
+     *         decide whether to route to a real opponent or to a bot.
+     */
+    function convertToPvE(uint256 gameId, uint256 botTokenId) external onlyResolver {
+        Game storage g = games[gameId];
+        require(g.status == GameStatus.Open, "Not open");
+        require(g.mode == GameMode.PvP, "Already routed");
+        require(address(botINFT) != address(0), "BotINFT not set");
+        require(botINFT.canCoverStake(botTokenId, g.stake), "Bot vault too small");
+
+        g.player2 = address(botINFT);
+        g.botTokenId = botTokenId;
+        g.mode = GameMode.PvE;
+        g.isPlayer2Bot = true;
+        g.status = GameStatus.Active;
+        g.timestamp = block.timestamp;
+
+        // Lock the bot's matching stake into this contract's escrow
+        botINFT.lockForMatch(botTokenId, g.stake, gameId);
+
+        emit GameJoined(gameId, address(botINFT), botTokenId);
+    }
+
     // ============ PvE (vs INFT bot) ============
 
     /**

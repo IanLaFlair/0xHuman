@@ -226,6 +226,66 @@ describe('OxHuman + BotINFT integration', function () {
         }
     });
 
+    describe('convertToPvE (blind matchmaking)', function () {
+        it('resolver converts Open PvP game to Active PvE', async function () {
+            const stake = ethers.parseEther('0.5');
+
+            // Player calls createGame (PvP intent — wallet popup never reveals it'll be PvE)
+            await oxhuman.connect(charlie).createGame({ value: stake });
+
+            const beforeGame = await oxhuman.games(0);
+            expect(beforeGame.status).to.equal(0); // Open
+            expect(beforeGame.mode).to.equal(0);   // PvP
+            expect(beforeGame.player2).to.equal(ethers.ZeroAddress);
+
+            // Backend matchmaker decides to route to bot 1 after wait window
+            const botBefore = (await bot.bots(1)).vaultBalance;
+            await oxhuman.connect(resolver).convertToPvE(0, 1);
+
+            const after = await oxhuman.games(0);
+            expect(after.status).to.equal(1); // Active
+            expect(after.mode).to.equal(1);   // PvE
+            expect(after.player2).to.equal(await bot.getAddress());
+            expect(after.botTokenId).to.equal(1);
+            expect(after.isPlayer2Bot).to.equal(true);
+
+            // Bot vault was debited by stake
+            const botAfter = (await bot.bots(1)).vaultBalance;
+            expect(botAfter).to.equal(botBefore - stake);
+
+            // Resolution still works — player guesses BOT (correct)
+            await oxhuman.connect(charlie).submitVerdict(0, true);
+            const game = await oxhuman.games(0);
+            expect(game.status).to.equal(2); // Resolved
+            expect(game.winner).to.equal(charlie.address);
+            expect(await oxhuman.winnings(charlie.address)).to.equal(ethers.parseEther('0.925'));
+        });
+
+        it('rejects non-resolver caller', async function () {
+            await oxhuman.connect(charlie).createGame({ value: ethers.parseEther('0.5') });
+            await expect(
+                oxhuman.connect(charlie).convertToPvE(0, 1)
+            ).to.be.revertedWith('Not resolver');
+        });
+
+        it('rejects if game not Open', async function () {
+            await oxhuman.connect(charlie).createGame({ value: ethers.parseEther('0.5') });
+            await oxhuman.connect(p2).joinGame(0, { value: ethers.parseEther('0.5') });
+            // Now Active PvP
+            await expect(
+                oxhuman.connect(resolver).convertToPvE(0, 1)
+            ).to.be.revertedWith('Not open');
+        });
+
+        it('rejects if bot vault too small', async function () {
+            // Charlie creates with stake 2 0G, but bot only has 10 0G total → max stake is 1 0G
+            await oxhuman.connect(charlie).createGame({ value: ethers.parseEther('2') });
+            await expect(
+                oxhuman.connect(resolver).convertToPvE(0, 1)
+            ).to.be.revertedWith('Bot vault too small');
+        });
+    });
+
     describe('createGamePvE rejections', function () {
         it('rejects if BotINFT not set', async function () {
             // Deploy fresh OxHuman without setting BotINFT

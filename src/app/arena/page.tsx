@@ -115,13 +115,16 @@ export default function ArenaPage() {
     }
   }, [isConfirmed, hash, router, targetGameId, createReceipt]);
 
+  // Testnet-tuned: stakes lowered ~40x from the production tiers (2/10/30) so
+  // dev wallets and small bot vaults (max stake = 10% of vault) can exercise
+  // the full match flow without depositing tens of 0G.
   const arenas = [
     {
-      id: 'playground',
-      title: 'THE PLAYGROUND',
-      stake: '2',
-      label: 'SIMULATION',
-      features: ['Low Risk Environment', 'Training Ground', 'Newbie Friendly'],
+      id: 'sandbox',
+      title: 'SANDBOX',
+      stake: '0.05',
+      label: 'TESTING',
+      features: ['Tiny stakes', 'Bot vault 0.5 0G+ covers', 'Dev/testnet only'],
       color: 'border-gray-700',
       hover: 'hover:border-gray-500',
       icon: <Terminal className="w-5 h-5" />
@@ -129,9 +132,9 @@ export default function ArenaPage() {
     {
       id: 'pit',
       title: 'THE PIT',
-      stake: '10',
+      stake: '0.25',
       label: 'COMBAT',
-      features: ['Medium Stakes', 'Combat Zone Active', 'Experienced Agents'],
+      features: ['Mid stakes', 'Bot vault 2.5 0G+ covers', 'Active combat'],
       color: 'border-primary',
       hover: 'hover:border-blue-400',
       recommended: true,
@@ -140,9 +143,9 @@ export default function ArenaPage() {
     {
       id: 'hightable',
       title: 'HIGH TABLE',
-      stake: '30',
+      stake: '1',
       label: 'ELITE',
-      features: ['Higher Risk', 'Skilled Players', 'Better Rewards'],
+      features: ['Big stakes', 'Bot vault 10 0G+ covers', 'Better rewards'],
       color: 'border-red-900',
       hover: 'hover:border-red-700',
       icon: <Trophy className="w-5 h-5" />

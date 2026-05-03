@@ -28,6 +28,10 @@ export interface ComputeConfig {
     signer?: Signer;
     /** When true, all infer() calls return deterministic fake replies. */
     mockMode?: boolean;
+    /** Sampling temperature (default 0.85). */
+    temperature?: number;
+    /** Max output tokens (default 80 — keeps replies tight for chat UX). */
+    maxTokens?: number;
 }
 
 export const DEFAULT_TESTNET_CONFIG = {
@@ -137,10 +141,17 @@ export async function infer(
     }
 
     const t0 = Date.now();
-    const response = await fetch(`${endpoint}/v1/proxy/chat/completions`, {
+    // Provider's `endpoint` already includes /v1/proxy, so just append the route
+    const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({ messages, model }),
+        body: JSON.stringify({
+            messages,
+            model,
+            // Persona-tuned generation knobs (caller can override via opts)
+            temperature: config.temperature ?? 0.85,
+            max_tokens: config.maxTokens ?? 80,
+        }),
     });
     const latencyMs = Date.now() - t0;
 

@@ -132,7 +132,14 @@ export class BotSession {
             { role: 'user', content: userMessage },
         ];
 
-        const result = await infer(this.computeConfig, messages);
+        // Layer the persona's voice knobs onto the base compute config so each
+        // bot replies with its own temperature/length budget.
+        const cfgWithVoice = {
+            ...this.computeConfig,
+            temperature: this.persona.voiceParameters?.temperature ?? this.computeConfig.temperature,
+            maxTokens: this.persona.voiceParameters?.maxTokens ?? this.computeConfig.maxTokens,
+        };
+        const result = await infer(cfgWithVoice, messages);
 
         // Update history with the user message and bot reply
         this.history.push({ role: 'user', content: userMessage });

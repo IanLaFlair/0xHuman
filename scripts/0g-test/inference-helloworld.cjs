@@ -71,11 +71,19 @@ async function main() {
     console.log(`Amount:    ${FUND_AMOUNT} 0G`);
     try {
         const tFund = Date.now();
-        await broker.ledger.depositFund(FUND_AMOUNT);
+        // SDK expects a Number for the deposit amount
+        await broker.ledger.depositFund(Number(FUND_AMOUNT));
         console.log(`✓ Deposit OK (${Date.now() - tFund}ms)`);
     } catch (e) {
         console.error(`❌ Fund failed: ${e.message}`);
-        console.error('Continuing — perhaps already funded.\n');
+        // Try ledger creation if it doesn't exist yet
+        try {
+            console.log('  Trying broker.ledger.addLedger() to create the ledger account…');
+            await broker.ledger.addLedger(Number(FUND_AMOUNT));
+            console.log('✓ Ledger created via addLedger');
+        } catch (e2) {
+            console.error(`  addLedger also failed: ${e2.message}`);
+        }
     }
 
     // Acknowledge TEE signer (one-time per provider)
@@ -104,7 +112,8 @@ async function main() {
 
     console.log(`\n=== INFERENCE CALL ===`);
     const tInfer = Date.now();
-    const response = await fetch(`${meta.endpoint}/v1/proxy/chat/completions`, {
+    // meta.endpoint already contains /v1/proxy, so just append the route
+    const response = await fetch(`${meta.endpoint}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ messages, model: meta.model }),

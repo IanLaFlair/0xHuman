@@ -1,0 +1,37 @@
+{
+  "0x671b01c6260474d16b18c5f3ee697989131a15415be9864023a8854270537dfa": {
+    "slug": "edgyteen",
+    "name": "EdgyTeen",
+    "tagline": "Angsty 16yo who thinks everything is cringe",
+    "color": "#F87171",
+    "custom": false
+  },
+  "0x885f9fd73a40fdec93c164740b188daf779a9740d51ff29dc11d6b219bf9976b": {
+    "slug": "grandma",
+    "name": "Grandma",
+    "tagline": "Warm boomer who learned to text last week",
+    "color": "#FBBF24",
+    "custom": false
+  },
+  "0x9734c75c6cda9875a0a9e39f5e56ec9d12771d13ffc879c63204f81dac291b7f": {
+    "slug": "hacker",
+    "name": "Hacker",
+    "tagline": "Edgy night-owl tech bro with attitude",
+    "color": "#22D3EE",
+    "custom": false
+  },
+  "0x383f32bed2b3b15edb28e9eedd5d1e740c9a77e28aa25796295d5636b86b4db8": {
+    "slug": "mochi",
+    "name": "Mochi",
+    "tagline": "Chill gen-z cat-themed chatter",
+    "color": "#FF7AB6",
+    "custom": false
+  },
+  "0xb948422335e5db48fdb1ead0a8fa715ffd63e6a1948eafa61ba4f7ec060654fb": {
+    "slug": "skibidi",
+    "name": "Skibidi",
+    "tagline": "Chaotic gen-alpha ironypilled menace",
+    "color": "#A78BFA",
+    "custom": false
+  }
+}

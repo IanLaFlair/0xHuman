@@ -131,10 +131,20 @@ export async function infer(
         return mockInferWithReason(messages, `getServiceMetadata failed: ${(e as Error).message}`);
     }
 
+    // Build the FINAL body first — getRequestHeaders signs the body, so the
+    // bytes we sign must match the bytes we send byte-for-byte. Earlier we
+    // signed messages-only and sent {messages, model, temperature, max_tokens},
+    // which makes the provider reject with "endpoint not supported".
+    const requestBody = JSON.stringify({
+        messages,
+        model,
+        temperature: config.temperature ?? 0.85,
+        max_tokens: config.maxTokens ?? 80,
+    });
+
     let headers: Record<string, string>;
     try {
-        const body = JSON.stringify(messages);
-        headers = await broker.inference.getRequestHeaders(config.providerAddress, body);
+        headers = await broker.inference.getRequestHeaders(config.providerAddress, requestBody);
     } catch (e) {
         // Most common: ledger not bootstrapped (3 0G minimum)
         return mockInferWithReason(messages, `getRequestHeaders failed: ${(e as Error).message}`);
@@ -145,13 +155,7 @@ export async function infer(
     const response = await fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify({
-            messages,
-            model,
-            // Persona-tuned generation knobs (caller can override via opts)
-            temperature: config.temperature ?? 0.85,
-            max_tokens: config.maxTokens ?? 80,
-        }),
+        body: requestBody,
     });
     const latencyMs = Date.now() - t0;
 

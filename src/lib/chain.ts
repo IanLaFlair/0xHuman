@@ -43,8 +43,8 @@ export interface DeploymentAddresses {
 const ADDRESSES_BY_CHAIN: Record<number, DeploymentAddresses> = {
     16602: {
         // Galileo testnet — kept in sync with scripts/0g-test/_deployed.json
-        OxHuman: '0x4ceA371d507Ad8D969DB6ec8d1Bf44D4c693A39d',
-        BotINFT: '0x037220319035977884e12E57C54F6D238Bc3317B',
+        OxHuman: '0x02adB0b07b53cC800b1173bceEd719426E2D5F02',
+        BotINFT: '0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e',
     },
     16661: {
         // Mainnet — populated after the Day 9 deploy

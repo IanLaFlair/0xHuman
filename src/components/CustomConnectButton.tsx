@@ -1,12 +1,20 @@
 'use client';
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useDisconnect, useSwitchChain, useChainId } from 'wagmi';
+import { useDisconnect, useSwitchChain, useChainId, useBalance } from 'wagmi';
 import { User, LogOut, ChevronDown, Wallet } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { zeroGMainnet, zeroGTestnet } from '@/lib/chain';
+
+function BalanceDisplay({ address }: { address: `0x${string}` }) {
+  const { data, isLoading } = useBalance({ address, query: { refetchInterval: 5000 } });
+  if (isLoading) return <span className="text-gray-500">…</span>;
+  if (!data) return <span>0 0G</span>;
+  const formatted = Number(data.formatted).toFixed(3).replace(/\.?0+$/, '');
+  return <span>{formatted} {data.symbol}</span>;
+}
 
 export default function CustomConnectButton() {
   const { disconnect } = useDisconnect();
@@ -170,7 +178,7 @@ export default function CustomConnectButton() {
                      <div className="bg-primary p-0.5 rounded-[2px]">
                        <Wallet className="w-3 h-3 text-black" />
                      </div>
-                     {account.displayBalance ? account.displayBalance : '0 0G'}
+                     <BalanceDisplay address={account.address as `0x${string}`} />
                   </div>
 
                   {/* Account Dropdown */}

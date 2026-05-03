@@ -684,7 +684,9 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                  <div className="flex-1 min-w-0">
                    <div className="flex items-center gap-2 flex-wrap mb-2">
                      <span className="text-2xl font-bold text-white">
-                       Defeated by {personaReveal?.name ?? 'an AI bot'}
+                       {isCorrectGuess
+                         ? `You unmasked ${personaReveal?.name ?? 'an AI bot'}`
+                         : `Defeated by ${personaReveal?.name ?? 'an AI bot'}`}
                      </span>
                      {personaReveal?.custom && (
                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-900/30 text-purple-300">CUSTOM</span>

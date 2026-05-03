@@ -11,7 +11,7 @@ const phases = [
     tagline: 'The foundation. Prove the concept works.',
     sections: [
       {
-        title: 'MVP on Mantle Sepolia Testnet',
+        title: 'MVP on 0G Sepolia Testnet',
         items: [
           'Core gameplay loop (60-second chat, voting, resolution)',
           'PvE mode (Human vs AI) and PvP mode (Human vs Human)',
@@ -21,9 +21,9 @@ const phases = [
       {
         title: 'Basic Economy',
         items: [
-          'MNT staking with 190% payout on wins',
+          '0G staking with 190% payout on wins',
           '5% protocol fee on winning pots',
-          'Three betting tiers (2 / 10 / 30 MNT)'
+          'Three betting tiers (2 / 10 / 30 0G)'
         ]
       },
       {
@@ -46,7 +46,7 @@ const phases = [
       {
         title: 'Liquidity Provider (LP) System',
         items: [
-          'Deposit MNT to become a House stakeholder',
+          'Deposit 0G to become a House stakeholder',
           'Receive 0xLP tokens representing pool share',
           'Earn yield from house edge on losing player bets'
         ]
@@ -56,7 +56,7 @@ const phases = [
         items: [
           'Dynamic max bet limits (10% of pool)',
           'Automatic arena availability based on liquidity',
-          'Reserve protection (minimum 10 MNT locked)'
+          'Reserve protection (minimum 10 0G locked)'
         ]
       },
       {
@@ -64,7 +64,7 @@ const phases = [
         items: [
           'Smart contract audits',
           'Security testing and hardening',
-          'Mantle Mainnet deployment'
+          '0G Mainnet deployment'
         ]
       }
     ]

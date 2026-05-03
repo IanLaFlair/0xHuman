@@ -403,7 +403,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
               <div className="text-primary font-bold mb-4 border-b border-muted pb-2">SYSTEM LOG</div>
               <div className="space-y-2 flex-1 overflow-y-auto">
                 <p>[14:02:01] &gt; Initializing handshake protocol...</p>
-                <p>[14:02:02] &gt; Connecting to Mantle Node #882...</p>
+                <p>[14:02:02] &gt; Connecting to 0G Node #882...</p>
                 <p className="text-green-500">[14:02:02] &gt; Secure connection established.</p>
                 <p>[14:02:03] &gt; Encrypting user payload...</p>
                 <p>[14:02:04] &gt; Scanning pool for matches [Rating: 1200-1400]...</p>
@@ -697,7 +697,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                <div className="grid grid-cols-2 gap-4">
                  <div className="bg-secondary/50 border border-muted p-6 rounded-lg">
                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-2">Total Stake</div>
-                   <div className="text-2xl font-bold text-white">{realStake} MNT</div>
+                   <div className="text-2xl font-bold text-white">{realStake} 0G</div>
                  </div>
                  <div className={`p-6 rounded-lg ${
                    isDraw ? 'bg-yellow-900/10 border border-yellow-900/50' :
@@ -709,7 +709,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    <div className={`text-2xl font-bold ${
                      isDraw ? 'text-yellow-500' : isCorrectGuess ? 'text-green-500' : 'text-red-500'
                    }`}>
-                     {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} MNT
+                     {isDraw ? '~0' : isCorrectGuess ? `+${payout.toFixed(2)}` : `-${realStake}`} 0G
                    </div>
                  </div>
                </div>
@@ -736,7 +736,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                    className={`w-full ${isDraw ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-green-600 hover:bg-green-500'} text-white font-bold py-4 rounded transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
                  >
                    {isClaiming ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isDraw ? 'REFUND' : 'PRIZE'} (${formatEther(winningsBalance as bigint)} MNT)`}
+                   {isClaiming ? 'CLAIMING...' : `CLAIM ${isDraw ? 'REFUND' : 'PRIZE'} (${formatEther(winningsBalance as bigint)} 0G)`}
                  </button>
                ) : isClaimed ? (
                  <div className="w-full bg-green-600/20 border border-green-500/50 text-green-500 font-bold py-4 rounded flex items-center justify-center gap-2">
@@ -915,11 +915,11 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
            <div className="space-y-6">
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">STAKE AMOUNT</span>
-               <span className="text-sm font-bold text-primary">{realStake} MNT</span>
+               <span className="text-sm font-bold text-primary">{realStake} 0G</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">WIN POTENTIAL</span>
-               <span className="text-sm font-bold text-accent-green">{(parseFloat(realStake) * 1.9).toFixed(1)} MNT</span>
+               <span className="text-sm font-bold text-accent-green">{(parseFloat(realStake) * 1.9).toFixed(1)} 0G</span>
              </div>
              <div className="flex justify-between items-center border-b border-muted pb-2">
                <span className="text-xs text-gray-500">LATENCY</span>

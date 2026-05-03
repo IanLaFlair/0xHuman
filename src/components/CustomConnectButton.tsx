@@ -6,7 +6,7 @@ import { User, LogOut, ChevronDown, Wallet } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { mantleSepoliaTestnet, mantle } from 'wagmi/chains';
+import { zeroGMainnet, zeroGTestnet } from '@/lib/chain';
 
 export default function CustomConnectButton() {
   const { disconnect } = useDisconnect();
@@ -125,37 +125,37 @@ export default function CustomConnectButton() {
                           <p className="text-xs font-bold text-white">Switch Networks</p>
                         </div>
                         
-                        {/* Mantle Mainnet - Coming Soon */}
+                        {/* 0G Mainnet - Coming Soon */}
                         <div className="flex items-center justify-between px-4 py-3 opacity-50 cursor-not-allowed">
                           <div className="flex items-center gap-3">
                             <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
-                              <img src="https://assets.coingecko.com/coins/images/30980/small/token-logo.png" alt="Mantle" className="w-5 h-5" />
+                              <span className="text-black font-bold text-[10px]">0G</span>
                             </div>
-                            <span className="text-sm text-gray-400">Mantle</span>
+                            <span className="text-sm text-gray-400">0G</span>
                           </div>
                           <span className="text-[10px] text-yellow-500 font-bold px-2 py-0.5 bg-yellow-500/10 rounded">COMING SOON</span>
                         </div>
-                        
-                        {/* Mantle Sepolia Testnet - Active */}
+
+                        {/* 0G Galileo Testnet - Active */}
                         <button
                           onClick={() => {
-                            if (chainId !== mantleSepoliaTestnet.id) {
-                              switchChain({ chainId: mantleSepoliaTestnet.id });
+                            if (chainId !== zeroGTestnet.id) {
+                              switchChain({ chainId: zeroGTestnet.id });
                             }
                             setIsNetworkOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors ${chainId === mantleSepoliaTestnet.id ? 'bg-primary/10' : ''}`}
+                          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors ${chainId === zeroGTestnet.id ? 'bg-primary/10' : ''}`}
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
-                              <img src="https://assets.coingecko.com/coins/images/30980/small/token-logo.png" alt="Mantle Sepolia" className="w-5 h-5" />
+                              <span className="text-black font-bold text-[10px]">0G</span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-sm text-white">Mantle Sepolia</span>
+                              <span className="text-sm text-white">0G Galileo</span>
                               <span className="text-[10px] text-gray-500">(Testnet)</span>
                             </div>
                           </div>
-                          {chainId === mantleSepoliaTestnet.id && (
+                          {chainId === zeroGTestnet.id && (
                             <span className="text-[10px] text-green-500 font-bold px-2 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
                               Connected <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
                             </span>
@@ -170,7 +170,7 @@ export default function CustomConnectButton() {
                      <div className="bg-primary p-0.5 rounded-[2px]">
                        <Wallet className="w-3 h-3 text-black" />
                      </div>
-                     {account.displayBalance ? account.displayBalance : '0 MNT'}
+                     {account.displayBalance ? account.displayBalance : '0 0G'}
                   </div>
 
                   {/* Account Dropdown */}

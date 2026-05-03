@@ -208,7 +208,7 @@ export default function ProfilePage() {
                       <td className="py-3 px-2 text-gray-300 font-mono text-xs">
                         {match.opponent?.slice(0, 6)}...{match.opponent?.slice(-4)}
                       </td>
-                      <td className="py-3 px-2 text-center text-gray-300">{match.stake} MNT</td>
+                      <td className="py-3 px-2 text-center text-gray-300">{match.stake} 0G</td>
                       <td className="py-3 px-2 text-center">
                         {match.won ? (
                           <span className="inline-flex items-center gap-1 text-green-400 font-semibold">
@@ -222,7 +222,7 @@ export default function ProfilePage() {
                       </td>
                       <td className="py-3 px-2 text-right text-primary">+{match.expEarned}</td>
                       <td className={`py-3 px-2 text-right font-semibold ${match.won ? 'text-green-400' : 'text-red-400'}`}>
-                        {match.won ? `+${match.payout.toFixed(2)}` : `-${match.stake}`} MNT
+                        {match.won ? `+${match.payout.toFixed(2)}` : `-${match.stake}`} 0G
                       </td>
                     </tr>
                   ))}

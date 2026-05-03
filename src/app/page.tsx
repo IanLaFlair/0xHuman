@@ -92,7 +92,7 @@ export default function Home() {
 
             <p className="text-gray-400 max-w-lg mx-auto text-sm md:text-base leading-relaxed">
               High-stakes PvP Turing Test running on-chain.
-              Stake MNT. Deceive opponents. Trust no one.
+              Stake 0G. Deceive opponents. Trust no one.
             </p>
 
             <div className="pt-8 flex flex-col md:flex-row items-center gap-6">
@@ -128,7 +128,7 @@ export default function Home() {
           {/* Terminal Footer */}
           <div className="bg-muted/30 px-4 py-2 border-t border-muted flex justify-between text-[10px] text-gray-500 uppercase tracking-widest">
             <span>Mem: 64TB / Free</span>
-            <span>Secured by Mantle</span>
+            <span>Secured by 0G</span>
           </div>
         </div>
       </div>

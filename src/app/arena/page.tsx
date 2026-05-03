@@ -10,12 +10,7 @@ import Navbar from '@/components/Navbar';
 import { useCreateGame, useJoinGame, useFindMatch } from '@/hooks/useOxHuman';
 import { decodeEventLog } from 'viem';
 import OxHumanArtifact from '@/contracts/OxHumanABI.json';
-const OxHumanABI = OxHumanArtifact.abi;
-
-const HOUSE_VAULT_ADDRESS = process.env.NEXT_PUBLIC_HOUSE_VAULT_ADDRESS as `0x${string}`;
-const HOUSE_VAULT_ABI = [
-  { name: 'maxBet', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] }
-] as const;
+const OxHumanABI = OxHumanArtifact;
 
 export default function ArenaPage() {
   const { isConnected, address } = useAccount();
@@ -24,23 +19,15 @@ export default function ArenaPage() {
   const [mounted, setMounted] = useState(false);
   const [selectedArena, setSelectedArena] = useState<string | null>(null);
   const [targetGameId, setTargetGameId] = useState<number | null>(null);
-  
+
   const { createGame, isPending: isCreating, isConfirming: isConfirmingCreate, isConfirmed: isCreated, hash: createHash, receipt: createReceipt } = useCreateGame();
   const { joinGame, isPending: isJoining, isConfirming: isConfirmingJoin, isConfirmed: isJoined, hash: joinHash } = useJoinGame();
   const { findMatch } = useFindMatch();
 
-  // Fetch maxBet from HouseVault to check pool capacity
-  const { data: maxBetRaw } = useReadContract({
-    address: HOUSE_VAULT_ADDRESS,
-    abi: HOUSE_VAULT_ABI,
-    functionName: 'maxBet',
-  });
-  const maxBet = maxBetRaw ? Number(formatEther(maxBetRaw)) : 0;
-
-  // Helper to check if arena is available
-  const isArenaAvailable = (stake: string) => {
-    return Number(stake) <= maxBet;
-  };
+  // 0G arch: each bot has its own vault enforced on-chain. The frontend
+  // doesn't gate arena availability on a global pool — convertToPvE checks
+  // bot vault sufficiency at match-time. Available arenas are static.
+  const isArenaAvailable = (_stake: string) => true;
 
 
   // Combine loading states
@@ -227,7 +214,7 @@ export default function ArenaPage() {
              <span className="text-xs font-bold tracking-widest">SECURE CONNECTION ESTABLISHED</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">SELECT YOUR ARENA</h1>
-          <p className="text-gray-400 max-w-lg">Initiate the Turing Test. Stake your MNT to enter the simulation. Deceive to win.</p>
+          <p className="text-gray-400 max-w-lg">Initiate the Turing Test. Stake your 0G to enter the simulation. Deceive to win.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -269,7 +256,7 @@ export default function ArenaPage() {
                    arena.id === 'pit' ? 'text-primary' :
                    'text-white'
                 }`}>{arena.stake}</span>
-                <span className="text-xs text-gray-500">MNT / Entry</span>
+                <span className="text-xs text-gray-500">0G / Entry</span>
               </div>
 
               <div className="space-y-3 mb-8">
@@ -293,8 +280,8 @@ export default function ArenaPage() {
               {!available && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg z-10">
                   <div className="text-center p-4">
-                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ POOL INSUFFICIENT</div>
-                    <div className="text-gray-400 text-[10px]">Max bet: {maxBet.toFixed(1)} MNT</div>
+                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ ARENA OFFLINE</div>
+                    <div className="text-gray-400 text-[10px]">Try another tier</div>
                   </div>
                 </div>
               )}
@@ -326,7 +313,7 @@ export default function ArenaPage() {
           <div className="flex flex-col items-center gap-4 relative z-10">
              <div className="w-full max-w-md flex justify-between text-xs font-mono text-gray-500 mb-2 border-b border-gray-800 pb-2">
                <span>SELECTED PROTOCOL</span>
-               <span className="text-primary uppercase">{selectedArena ? arenas.find(a => a.id === selectedArena)?.title : 'NONE'} ({selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '0'} MNT)</span>
+               <span className="text-primary uppercase">{selectedArena ? arenas.find(a => a.id === selectedArena)?.title : 'NONE'} ({selectedArena ? arenas.find(a => a.id === selectedArena)?.stake : '0'} 0G)</span>
              </div>
              
              <button
@@ -346,7 +333,7 @@ export default function ArenaPage() {
                {isPending ? 'CONFIRMING...' : isConfirming ? 'INITIALIZING...' : 'INITIALIZE LINK [ENTER ARENA]'}
              </button>
              
-             <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-2">Gas fees apply // Mantle Network</p>
+             <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-2">Gas fees apply // 0G Network</p>
           </div>
         </div>
       </div>

@@ -45,6 +45,11 @@ import {
     appendMatch,
     type MatchOutcome,
 } from './lib/bot-memory.ts';
+import {
+    configFromPrivateKey as computeConfigFromPrivateKey,
+    type ComputeConfig,
+} from './lib/0g-compute.ts';
+import { extractLesson } from './lib/lesson-extractor.ts';
 
 dotenv.config({ path: '.env.local' });
 
@@ -123,6 +128,7 @@ const botContract = new ethers.Contract(BOTINFT_ADDRESS, botAbi, resolverWallet)
 // ============ Storage config ============
 
 const storageCfg: StorageConfig = storageConfigFromPrivateKey(RESOLVER_PRIVATE_KEY, NETWORK);
+const computeCfg: ComputeConfig = computeConfigFromPrivateKey(RESOLVER_PRIVATE_KEY, NETWORK);
 const personaKey = PERSONA_KEY_HEX ? Buffer.from(PERSONA_KEY_HEX, 'hex') : null;
 
 // ============ Hash → persona-meta lookup ============
@@ -715,12 +721,28 @@ async function _resolveGame(gameId: number): Promise<string | null> {
             if (state.botTokenId !== null) {
                 await persistTranscript(gameId, state.transcript);
 
-                // Update bot memory
+                // Best-effort: ask Qwen to summarise what the player did so the bot
+                // accumulates a real lessons playbook over time. Failures don't
+                // block resolution — memory just gets the stats update without a lesson.
+                let lesson: string | null = null;
+                try {
+                    const personaName = state.botSession?.persona.name ?? 'AI bot';
+                    lesson = await extractLesson(computeCfg, state.transcript, {
+                        botPersonaName: personaName,
+                        botWon: p2Won,
+                    });
+                    if (lesson) console.log(`📚 Lesson for bot ${state.botTokenId}: ${lesson}`);
+                } catch (e) {
+                    console.warn(`Lesson extraction failed for ${gameId}:`, (e as Error).message);
+                }
+
+                // Update bot memory (with lesson appended if extraction succeeded)
                 const newMemory = appendMatch(state.botSession?.memory ?? emptyMemory(state.botTokenId), {
                     matchId: gameId,
                     opponent: player1,
                     botWon: p2Won,
                     stake: stakeNumber,
+                    lesson: lesson ?? undefined,
                     ts: Date.now(),
                 } as MatchOutcome);
                 await persistBotMemory(state.botTokenId, newMemory);

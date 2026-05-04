@@ -237,10 +237,10 @@ export async function awardReferralExp(referrerAddress: string, referredAddress:
 /**
  * Get leaderboard (top EXP players)
  */
-export async function getExpLeaderboard(limit: number = 10): Promise<Array<{ address: string; exp: number; gamesPlayed: number }>> {
+export async function getExpLeaderboard(limit: number = 10): Promise<Array<{ address: string; exp: number; gamesPlayed: number; gamesWon: number; referralCount: number }>> {
     try {
         const result = await pool.query(
-            'SELECT address, total_exp, games_played FROM player_exp ORDER BY total_exp DESC LIMIT $1',
+            'SELECT address, total_exp, games_played, games_won, referral_count FROM player_exp ORDER BY total_exp DESC LIMIT $1',
             [limit]
         );
 
@@ -248,6 +248,8 @@ export async function getExpLeaderboard(limit: number = 10): Promise<Array<{ add
             address: row.address,
             exp: row.total_exp,
             gamesPlayed: row.games_played,
+            gamesWon: row.games_won,
+            referralCount: row.referral_count,
         }));
     } catch (error: any) {
         console.error('❌ Failed to get leaderboard:', error.message);

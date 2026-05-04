@@ -5,29 +5,38 @@ import React from 'react';
 const phases = [
   {
     id: 1,
-    title: 'Genesis',
+    title: 'Genesis (0G testnet)',
     status: 'current',
     emoji: '✅',
-    tagline: 'The foundation. Prove the concept works.',
+    tagline: 'The foundation. Verifiable AI as gameplay, end-to-end.',
     sections: [
       {
-        title: 'MVP on 0G Sepolia Testnet',
+        title: 'Live on 0G Galileo Testnet',
         items: [
-          'Core gameplay loop (60-second chat, voting, resolution)',
-          'PvE mode (Human vs AI) and PvP mode (Human vs Human)',
-          'On-chain betting with smart contract escrow'
+          '60-second blind chat → vote → on-chain settle',
+          'PvE mode (Human vs INFT bot) and PvP mode (Human vs Human)',
+          'Per-bot vault model — each bot is its own bankroll'
         ]
       },
       {
-        title: 'Basic Economy',
+        title: 'Full 0G Stack Wired',
         items: [
-          '0G staking with 190% payout on wins',
-          '5% protocol fee on winning pots',
-          'Three betting tiers (2 / 10 / 30 0G)'
+          '0G Compute (Qwen 2.5 7B Instruct, TEE-attested)',
+          '0G Storage (encrypted bot prompts + memory + chat transcripts)',
+          '0G Chain (game escrow + INFT registry)',
+          'ERC-7857 Agent ID (tradable bot ownership)'
         ]
       },
       {
-        title: '0xP System Launch',
+        title: 'Bot Economy',
+        items: [
+          'Free first slot + paid slot 2/3 (10/25 0G)',
+          'Owner deposits vault → bot matches player stakes 1:1',
+          'Owner earns when bot wins, loses when bot loses'
+        ]
+      },
+      {
+        title: '0xP System',
         items: [
           'Experience points for every game played',
           'Leaderboard rankings',
@@ -38,91 +47,99 @@ const phases = [
   },
   {
     id: 2,
-    title: 'House Pool',
+    title: 'Mainnet + Memory',
     status: 'upcoming',
-    emoji: '🔄',
-    tagline: 'Decentralize the house. Let anyone be the casino.',
+    emoji: '🧠',
+    tagline: 'Bots that get smarter over time, on real money.',
     sections: [
       {
-        title: 'Liquidity Provider (LP) System',
+        title: '0G Mainnet Deployment',
         items: [
-          'Deposit 0G to become a House stakeholder',
-          'Receive 0xLP tokens representing pool share',
-          'Earn yield from house edge on losing player bets'
+          'Contracts re-deployed on 0G mainnet (chain 16661)',
+          'Real-money stakes with production-tier economics',
+          'Smart contract audit pass before launch'
         ]
       },
       {
-        title: 'Pool Governance',
+        title: 'Persistent Memory (when 0G ships it)',
         items: [
-          'Dynamic max bet limits (10% of pool)',
-          'Automatic arena availability based on liquidity',
-          'Reserve protection (minimum 10 0G locked)'
+          'Replace RAG-injected memory block with native 0G Persistent Memory',
+          'Cross-session bot context without re-uploading the entire blob',
+          'Larger lesson buffers, longer opponent histories'
         ]
       },
       {
-        title: 'Mainnet Preparation',
+        title: 'Lesson Curation',
         items: [
-          'Smart contract audits',
-          'Security testing and hardening',
-          '0G Mainnet deployment'
+          'Owner-side UI to approve/reject auto-extracted lessons',
+          'Manual lesson injection from creator notes',
+          'Lesson voting and sharing across bots an owner controls'
         ]
       }
     ]
   },
   {
     id: 3,
-    title: '0xP Airdrop',
+    title: 'Bot Marketplace',
     status: 'upcoming',
-    emoji: '📸',
-    tagline: 'Reward the early believers.',
+    emoji: '🤖',
+    tagline: 'Trade, rent, and stake on AI bots like assets.',
     sections: [
       {
-        title: 'Snapshot Event',
+        title: 'ERC-7857 Secondary Market',
         items: [
-          'All accumulated 0xP captured at a specific block',
-          'Top players on leaderboard receive bonus allocation',
-          'Referral multipliers for active promoters'
+          'List bots for sale with re-encrypted metadata transfer',
+          'Floor + bid book per persona',
+          'Royalties to original creator on every resale'
         ]
       },
       {
-        title: 'Token Distribution',
+        title: 'Bot Rental (authorizeUsage)',
         items: [
-          '0xP converts to governance/utility token',
-          'Claimable airdrop for eligible wallets',
-          'Staking opportunities for long-term holders'
+          'Rent out top bots without transferring ownership',
+          'Time-bounded usage grants',
+          'Automatic revenue split between owner and renter'
+        ]
+      },
+      {
+        title: 'Bot LPing',
+        items: [
+          'Stake your 0G into someone else\'s bot vault',
+          'Share P/L based on stake share',
+          'Curate top performers, reduce single-creator concentration'
         ]
       }
     ]
   },
   {
     id: 4,
-    title: 'The Marketplace',
+    title: 'Fine-Tuning + Alignment',
     status: 'upcoming',
-    emoji: '🤖',
-    tagline: 'Build your own deceptive agent.',
+    emoji: '⚡',
+    tagline: 'Truly evolving agents, watched by alignment nodes.',
     sections: [
       {
-        title: 'Prompt-to-Earn',
+        title: '0G Compute Fine-Tuning',
         items: [
-          'Create custom AI bots with unique personalities',
-          'Train them to deceive human players',
-          'Deploy bots to the arena for passive income'
+          'Fine-tune your bot on its own match history',
+          'Snapshot → Train → Promote — same INFT, smarter weights',
+          'Side-by-side compare original vs fine-tuned variant'
         ]
       },
       {
-        title: 'Bot NFTs',
+        title: 'AI Alignment Nodes',
         items: [
-          'Each bot is a unique on-chain asset',
-          'Trade successful bots on marketplace',
-          'Rent out high-performing bots'
+          'Real-time drift / bias / anomaly detection on bot replies',
+          'Quarantine misbehaving bots before they hit prod matchmaking',
+          'Public dashboard of alignment scores per persona'
         ]
       },
       {
-        title: 'Revenue Sharing',
+        title: '0xP Airdrop',
         items: [
-          'When your bot tricks a human → you earn a % of winnings',
-          'Leaderboard for most deceptive bots',
-          'Seasonal competitions with prizes'
+          'Snapshot accumulated 0xP at a specific block',
+          'Top players + active referrers receive bonus allocation',
+          'Token claim with optional staking'
         ]
       }
     ]
@@ -134,7 +151,7 @@ export default function RoadmapTimeline() {
     <div>
       <h1 className="text-3xl font-bold text-primary mb-2 tracking-tight">ROADMAP</h1>
       <p className="text-gray-400 mb-8">
-        The evolution of 0xHuman. From testnet experiments to a full-fledged social deduction ecosystem.
+        The evolution of 0xHuman. From the live 0G testnet build to fine-tuned, alignment-monitored AI agents.
       </p>
 
       {/* Timeline */}
@@ -147,8 +164,8 @@ export default function RoadmapTimeline() {
           <div key={phase.id} className="relative pl-10 pb-8 last:pb-0">
             {/* Dot on the line */}
             <div className={`absolute left-0 top-1 w-5 h-5 rounded-full border-2 ${
-              phase.status === 'current' 
-                ? 'bg-primary border-primary shadow-[0_0_10px_rgba(59,130,246,0.5)]' 
+              phase.status === 'current'
+                ? 'bg-primary border-primary shadow-[0_0_10px_rgba(59,130,246,0.5)]'
                 : 'bg-gray-900 border-gray-600'
             }`} />
 
@@ -160,7 +177,7 @@ export default function RoadmapTimeline() {
               </h2>
               {phase.status === 'current' && (
                 <span className="text-[10px] px-2 py-0.5 bg-primary/20 text-primary rounded font-bold">
-                  CURRENT
+                  LIVE
                 </span>
               )}
             </div>
@@ -196,8 +213,8 @@ export default function RoadmapTimeline() {
       <div className="mt-8 pt-6 border-t border-gray-800">
         <h2 className="text-lg font-bold text-white mb-2">Beyond Phase 4...</h2>
         <p className="text-gray-400 text-sm">
-          Future possibilities include cross-chain expansion, tournament modes with prize pools, 
-          DAO governance for protocol parameters, and partnership integrations with other AI/Web3 projects.
+          Cross-language bot personas, tournament mode with leaderboards per persona,
+          DAO governance for protocol parameters, and mobile-native app.
         </p>
       </div>
     </div>

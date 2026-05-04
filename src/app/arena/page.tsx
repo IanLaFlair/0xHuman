@@ -52,14 +52,17 @@ export default function ArenaPage() {
     if (address && isConnected) {
       const referrer = localStorage.getItem('0xhuman_referrer');
       if (referrer && referrer !== address.slice(0, 8)) {
-        // Register this user as referred
-        fetch(`http://localhost:3001/api/register-referral`, {
+        // Caddy routes /api/* to the Socket.io/REST server (:3001) in prod;
+        // in dev we hit the standalone server directly.
+        const wsUrl = (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'))
+          ? window.location.origin
+          : 'http://localhost:3001';
+        fetch(`${wsUrl}/api/register-referral`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ referrer, referred: address })
         }).then(() => {
           console.log(`✅ Registered as referred by ${referrer}`);
-          // Clear after registration to prevent re-registering
           localStorage.removeItem('0xhuman_referrer');
         }).catch(console.error);
       }

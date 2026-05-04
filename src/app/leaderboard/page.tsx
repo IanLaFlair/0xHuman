@@ -7,10 +7,10 @@ import { useAccount } from 'wagmi';
 
 interface LeaderboardRow {
     address: string;
-    total_exp: number;
-    games_played: number;
-    games_won: number;
-    referral_count: number;
+    exp: number;
+    gamesPlayed: number;
+    gamesWon: number;
+    referralCount: number;
 }
 
 interface LeaderboardResponse {
@@ -89,13 +89,13 @@ export default function LeaderboardPage() {
                         <div className="bg-secondary/30 border border-muted p-4 rounded min-w-[140px]">
                             <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total 0xP</div>
                             <div className="text-xl font-bold text-white">
-                                {data ? data.totalExp.toLocaleString() : '—'}
+                                {data ? (data.totalExp ?? 0).toLocaleString() : '—'}
                             </div>
                         </div>
                         <div className="bg-secondary/30 border border-muted p-4 rounded min-w-[140px]">
                             <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Active Players</div>
                             <div className="text-xl font-bold text-primary">
-                                {data ? data.totalPlayers.toLocaleString() : '—'}
+                                {data ? (data.totalPlayers ?? 0).toLocaleString() : '—'}
                             </div>
                         </div>
                     </div>
@@ -143,7 +143,7 @@ export default function LeaderboardPage() {
                                     filtered.map((row, idx) => {
                                         const rank = rows.indexOf(row) + 1;
                                         const isMe = address && row.address.toLowerCase() === address.toLowerCase();
-                                        const winRate = row.games_played === 0 ? 0 : Math.round((row.games_won / row.games_played) * 100);
+                                        const winRate = (row.gamesPlayed ?? 0) === 0 ? 0 : Math.round(((row.gamesWon ?? 0) / (row.gamesPlayed ?? 0)) * 100);
                                         const short = `${row.address.slice(0, 6)}…${row.address.slice(-4)}`;
                                         return (
                                             <div
@@ -178,7 +178,7 @@ export default function LeaderboardPage() {
                                                         </a>
                                                     </div>
                                                 </div>
-                                                <div className="col-span-2 text-right text-gray-300 font-medium">{row.games_played}</div>
+                                                <div className="col-span-2 text-right text-gray-300 font-medium">{(row.gamesPlayed ?? 0)}</div>
                                                 <div className="col-span-2 flex justify-center">
                                                     <div className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 ${winRate >= 80 ? 'bg-green-500/10 text-green-500 border border-green-500/30' : winRate >= 50 ? 'bg-blue-500/10 text-blue-500 border border-blue-500/30' : 'bg-gray-800 text-gray-400'}`}>
                                                         {winRate}%
@@ -186,7 +186,7 @@ export default function LeaderboardPage() {
                                                     </div>
                                                 </div>
                                                 <div className="col-span-2 text-right font-bold text-primary">
-                                                    {row.total_exp.toLocaleString()}
+                                                    {(row.exp ?? 0).toLocaleString()}
                                                 </div>
                                             </div>
                                         );
@@ -218,7 +218,7 @@ export default function LeaderboardPage() {
                                 <div>
                                     <div className="text-[10px] text-gray-500 uppercase tracking-wider">My 0xP</div>
                                     <div className="text-primary font-bold">
-                                        {myRow >= 0 ? rows[myRow].total_exp.toLocaleString() : '0'}
+                                        {myRow >= 0 ? (rows[myRow].exp ?? 0).toLocaleString() : '0'}
                                     </div>
                                 </div>
                             </div>

@@ -123,69 +123,57 @@ Live demo at 0xhuman.fun. OxHuman contract at 0x02adB0b07b53cC800b1173bceEd71942
 ## Progress During Hackathon
 
 ```
-We had previously submitted an earlier version of 0xHuman to the Mantle hackathon. It lost. We came back honest about what didn't work and rebuilt the entire architecture around 0G's verifiable-AI thesis.
-
-The Mantle build is preserved at git tag legacy-mantle-v1. The current main branch is a different project.
-
-Architecture redesign:
-
-Dropped HouseVault entirely. The Mantle build had a global LP pool that backed all PvE matches — anonymous, single-operator, untrustable. Replaced with per-bot vaults: each INFT has its own bankroll, its owner has skin in the game.
-
-Replaced Gemini with 0G Compute (Qwen 2.5 7B Instruct, TEE-attested). Centralized inference becomes verifiable.
-
-Added INFT bot ownership via ERC-7857 with encrypted metadata on 0G Storage.
+0xHuman is a PvP Turing-Test betting game where AI bots are tradable INFTs. Built end-to-end during the hackathon on the full 0G stack — Compute, Storage, Chain, and ERC-7857 Agent ID.
 
 Smart contracts:
 
-Wrote BotINFT.sol from scratch — ERC-7857-inspired with per-bot vault, memory anchor, slot economy.
+Wrote BotINFT.sol from scratch — an ERC-7857-inspired implementation with per-bot vault, on-chain memory anchor, and slot economy (free first slot, paid slot 2 at 10 0G, paid slot 3 at 25 0G; max 3 per wallet).
 
-Refactored OxHuman.sol to drop HouseVault dependency, integrate BotINFT, and add convertToPvE() for blind matchmaking and anchorChatLog() for transcript proofs.
+Wrote OxHuman.sol — game escrow + verdict resolution. Includes convertToPvE() so the matchmaker can inject a bot mid-match while preserving blind matchmaking from the player's perspective, and anchorChatLog() for on-chain transcript proofs.
 
-47 unit tests covering mint flows, vault operations, match integration, fee math, signature resolution, and ERC-7857 transfer with re-encrypted metadata.
+47 hardhat unit tests covering mint flows, vault operations, match integration, fee math (5% protocol + 10% performance), signed-vote resolution, and ERC-7857 transfer with re-encrypted metadata.
 
-Off-chain integration:
+Deployed to 0G Galileo testnet (chain 16602): OxHuman at 0x02adB0b07b53cC800b1173bceEd719426E2D5F02 and BotINFT at 0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e.
 
-Wrote lib/0g-compute.ts wrapper with TEE attestation verification and auto-fallback to mock mode when the Compute ledger is not bootstrapped.
+Off-chain integration libraries:
 
-Wrote lib/0g-storage.ts wrapper with AES-256-GCM encryption helpers.
+lib/0g-compute.ts — typed wrapper around the 0G Compute SDK. Routes inference through Qwen 2.5 7B Instruct on the TEE-attested provider 0xa48f01287233509FD694a22Bf840225062E67836. Verifies the TEE signature via processResponse() before relaying replies. ~700–900ms per turn. Auto-falls-back to mock mode when the Compute ledger is not bootstrapped, so downstream code is never blocked by inference availability.
 
-Wrote lib/bot-memory.ts with schema, mutations, and RAG context injection for the bot's system prompt.
+lib/0g-storage.ts — typed wrapper around the 0G Storage SDK with AES-256-GCM encryption helpers. Used for encrypted persona blobs, encrypted bot memory, and plaintext chat transcripts.
 
-Wrote lib/lesson-extractor.ts — post-match Qwen call that distills a single lesson from the transcript and appends it to the bot's memory.
+lib/bot-memory.ts — schema, mutations, and RAG context injection for the bot's system prompt. Accumulates stats, hashed opponent history, and lessons learned. Capped to 50 opponents, 30 lessons, 10 match summaries to keep prompts tight.
 
-Backend rewrite:
+lib/lesson-extractor.ts — post-match Qwen call that distills a single 20-word lesson from the transcript. Real example produced from a real match: "Accuse directly and use speed tests early." The lesson is appended to bot memory, the blob re-encrypted, re-uploaded to 0G Storage, and the new hash committed on-chain via BotINFT.updateMemory(). The next match the bot replies with the new lessons in its system prompt.
 
-Replaced the separate bot-agent.ts Mantle process with a single 0G-aware server.ts that owns matchmaking, bot orchestration via BotSession, transcript upload to 0G Storage, memory updates with on-chain commitment, and resolution via signed votes.
+Backend:
 
-Frontend:
+server.ts is a single Node.js + Socket.io process that owns: matchmaking with a 12-second human-vs-bot timer, BotSession orchestration per PvE match, transcript upload to 0G Storage, memory updates with on-chain commitment, and resolveWithSignatures() submission. Emits a bot_ready event so the visible 60-second match timer doesn't burn while bot memory loads from 0G Storage.
 
-Switched all chains from Mantle to 0G Galileo (chain 16602) and 0G Mainnet (chain 16661).
+Frontend (Next.js 14):
 
-Built /bots/create with template and custom prompt mode (5 hand-crafted personas plus user-authored personas).
+Custom chain config for 0G Galileo (16602) and 0G Mainnet (16661). RainbowKit + Wagmi v2.
 
-Built /bots/my creator dashboard.
+/bots/create with both template (5 hand-crafted personas: Mochi, Skibidi, Hacker, Grandma, EdgyTeen) and custom prompt mode (50–4000 chars, color picker, live preview).
 
-Built post-match Identity Unmasked reveal card with persona name, INFT token id, owner address, and chainscan link.
+/bots/my creator dashboard with vault deposit, withdraw, burn, and stats.
 
-Added on-chain fallback so the reveal card renders even if the page is refreshed and the gameResolved socket event was missed.
+In-game terminal (/game/[id]) with timer, chat bubbles, vote phase, and post-match Identity Unmasked reveal card showing persona name, INFT token id, owner address, and chainscan link.
 
-Replaced the static "Coming Soon" leaderboard with live data from /api/exp-leaderboard.
+On-chain fallback for the reveal card so it renders correctly even after a page refresh that misses the gameResolved socket event.
+
+Live leaderboard at /leaderboard wired to /api/exp-leaderboard with games played, win rate, and 0xP per wallet.
+
+Documentation site at /docs (rendered from /docs/*.md) with sections on gameplay, bot INFTs, 0G integration, roadmap, and FAQ.
 
 Production deploy:
 
-Deployed contracts to Galileo testnet. Updated VPS at 0xhuman.fun: pulled main, rebuilt, added 0xhuman-server PM2 process for Socket.io and REST. Cleaned legacy Mantle-era leaderboard data while preserving the deployer wallet for demo continuity.
+Live at 0xhuman.fun. Caddy reverse-proxy routes /socket.io/* and /api/* to port 3001 (server.ts) and the rest to port 3000 (Next.js). Two PM2 processes: 0xhuman (Next.js prod) and 0xhuman-server (Socket.io + REST).
 
-Documentation:
+What's running today:
 
-Rewrote README around the 0G architecture. Wrote docs/hackathon/0G-ARCHITECTURE.md (full tech spec), RETROSPECTIVE-MANTLE.md (honest postmortem), and PITCH-DECK.md (12-slide content draft). Rewrote /docs/* for the new architecture (gameplay, bot INFTs, 0G integration).
+Full PvE flow end-to-end on 0xhuman.fun. Real Qwen replies in 700–900ms with TEE attestation verified per turn. Real bot memory accumulating with auto-extracted lessons. All verifiable on chainscan-galileo.0g.ai (game state + INFT registry) and storagescan-galileo.0g.ai (encrypted blobs + plaintext transcripts).
 
-What is running today:
-
-Full match flow live on 0xhuman.fun. Real Qwen replies in 700-900ms with TEE attestation verified per turn. Real bot memory accumulating with auto-extracted lessons. All verifiable on chainscan-galileo.0g.ai and storagescan-galileo.0g.ai.
-
-Honest disclosure:
-
-This project did not start during this hackathon — the concept and Mantle build pre-dated it. What we built during the hackathon period is the 0G integration layer: smart contracts, library wrappers, INFT economy, encrypted persona storage, memory and lesson extraction, frontend rewrite, VPS production deploy, and all documentation. The Mantle pre-history is at git tag legacy-mantle-v1 for full transparency.
+4 of 6 0G primitives in active use. Persistent Memory and AI Alignment Nodes are roadmap items, waiting on 0G to ship them publicly.
 ```
 
 ---

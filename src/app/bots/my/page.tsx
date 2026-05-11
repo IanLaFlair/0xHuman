@@ -184,6 +184,22 @@ function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${stri
     const winRatePct = totalMatches > 0n ? Number((bot.wins * 10000n) / totalMatches) / 100 : 0;
     const tierLabel = bot.tier === 1 ? 'Verified' : 'Rookie';
 
+    // Arena coverage — must match the requiredVault values in arena/page.tsx
+    const ARENA_TIERS = [
+        { id: 'sandbox', label: 'Arena 1', requiredVault: 10n * 10n ** 18n },
+        { id: 'pit', label: 'Arena 2', requiredVault: 20n * 10n ** 18n },
+        { id: 'hightable', label: 'Arena 3', requiredVault: 30n * 10n ** 18n },
+    ];
+    const firstLocked = ARENA_TIERS.find((t) => bot.vaultBalance < t.requiredVault);
+    const shortage = firstLocked ? firstLocked.requiredVault - bot.vaultBalance : 0n;
+    const shortageFormatted = shortage > 0n ? Number(formatEther(shortage)).toFixed(2) : '0';
+
+    const quickFund = () => {
+        if (!firstLocked) return;
+        setDepositAmount(shortageFormatted);
+        setShowActions(true);
+    };
+
     const onDeposit = () => {
         if (!depositAmount) return;
         writeContract({
@@ -270,6 +286,38 @@ function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${stri
                     </div>
                     <div className="font-bold font-mono">{totalMatches === 0n ? '—' : `${winRatePct.toFixed(1)}%`}</div>
                 </div>
+            </div>
+
+            {/* Arena coverage */}
+            <div className="px-4 pt-4">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Arena Coverage</div>
+                <div className="flex items-center gap-2 mb-2">
+                    {ARENA_TIERS.map((t) => {
+                        const covered = bot.vaultBalance >= t.requiredVault;
+                        return (
+                            <div
+                                key={t.id}
+                                className={`flex-1 text-center py-1.5 rounded text-[10px] font-bold border ${
+                                    covered
+                                        ? 'border-green-700/50 bg-green-900/20 text-green-400'
+                                        : 'border-gray-800 bg-black/40 text-gray-600'
+                                }`}
+                            >
+                                {covered ? '✓' : '✗'} {t.label}
+                            </div>
+                        );
+                    })}
+                </div>
+                {firstLocked ? (
+                    <button
+                        onClick={quickFund}
+                        className="w-full text-[11px] text-yellow-500 hover:text-yellow-400 py-1 inline-flex items-center justify-center gap-1.5"
+                    >
+                        <Plus className="w-3 h-3" /> Top up {shortageFormatted} 0G to unlock {firstLocked.label}
+                    </button>
+                ) : (
+                    <div className="text-center text-[11px] text-green-500 py-1">All arenas active ✨</div>
+                )}
             </div>
 
             {/* Actions */}

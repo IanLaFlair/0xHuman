@@ -415,6 +415,26 @@ const httpServer = createServer((req, res) => {
         return;
     }
 
+    // GET /api/arena-status — per-tier availability based on bot vault sizes.
+    // Walks every minted bot and reports the largest vault + which tiers it
+    // can serve. Frontend disables arena cards whose threshold isn't met.
+    if (req.method === 'GET' && url.pathname === '/api/arena-status') {
+        getArenaStatus()
+            .then((status) => {
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'public, max-age=15',
+                });
+                res.end(JSON.stringify(status));
+            })
+            .catch((err) => {
+                console.error('arena-status error:', err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to compute arena status' }));
+            });
+        return;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/register-referral') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
@@ -445,6 +465,61 @@ const httpServer = createServer((req, res) => {
 
 async function getGameOnChain(gameId: number): Promise<any> {
     return await oxhuman.games(BigInt(gameId));
+}
+
+// Arena tier thresholds — must match frontend arena.requiredVault values.
+const ARENA_TIERS = {
+    sandbox: ethers.parseEther('10'),
+    pit: ethers.parseEther('20'),
+    hightable: ethers.parseEther('30'),
+} as const;
+
+interface ArenaStatus {
+    sandbox: boolean;
+    pit: boolean;
+    hightable: boolean;
+    maxVault: string;
+    botCount: number;
+    cachedAt: number;
+}
+
+let arenaStatusCache: ArenaStatus | null = null;
+const ARENA_STATUS_TTL_MS = 15_000;
+
+async function getArenaStatus(): Promise<ArenaStatus> {
+    const now = Date.now();
+    if (arenaStatusCache && now - arenaStatusCache.cachedAt < ARENA_STATUS_TTL_MS) {
+        return arenaStatusCache;
+    }
+
+    const next = (await botContract.nextTokenId()) as bigint;
+    const total = Number(next) - 1;
+
+    let maxVault = 0n;
+    let counted = 0;
+    if (total > 0) {
+        for (let id = 1; id <= total; id++) {
+            try {
+                const b = await botContract.bots(BigInt(id));
+                const vault = b.vaultBalance as bigint;
+                if (vault > maxVault) maxVault = vault;
+                counted++;
+            } catch {
+                // skip burned / unreadable tokens
+            }
+        }
+    }
+
+    const status: ArenaStatus = {
+        sandbox: maxVault >= ARENA_TIERS.sandbox,
+        pit: maxVault >= ARENA_TIERS.pit,
+        hightable: maxVault >= ARENA_TIERS.hightable,
+        maxVault: ethers.formatEther(maxVault),
+        botCount: counted,
+        cachedAt: now,
+    };
+    arenaStatusCache = status;
+    return status;
 }
 
 /**

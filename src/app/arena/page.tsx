@@ -24,10 +24,36 @@ export default function ArenaPage() {
   const { joinGame, isPending: isJoining, isConfirming: isConfirmingJoin, isConfirmed: isJoined, hash: joinHash } = useJoinGame();
   const { findMatch } = useFindMatch();
 
-  // 0G arch: each bot has its own vault enforced on-chain. The frontend
-  // doesn't gate arena availability on a global pool — convertToPvE checks
-  // bot vault sufficiency at match-time. Available arenas are static.
-  const isArenaAvailable = (_stake: string) => true;
+  // Arena availability: a bot's vault must hold ≥ 10× the arena stake
+  // (MAX_STAKE_PERCENT in BotINFT). The /api/arena-status endpoint walks
+  // every minted bot, picks the largest vault, and reports per-tier
+  // availability so disabled cards reflect on-chain state.
+  const [arenaStatus, setArenaStatus] = useState<{
+    sandbox: boolean;
+    pit: boolean;
+    hightable: boolean;
+    maxVault: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const baseUrl = (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'))
+      ? window.location.origin
+      : 'http://localhost:3001';
+    const load = () => {
+      fetch(`${baseUrl}/api/arena-status`)
+        .then((r) => r.json())
+        .then(setArenaStatus)
+        .catch(() => setArenaStatus(null));
+    };
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const isArenaAvailable = (arenaId: string) => {
+    if (!arenaStatus) return true;
+    return (arenaStatus as any)[arenaId] === true;
+  };
 
 
   // Combine loading states
@@ -118,16 +144,16 @@ export default function ArenaPage() {
     }
   }, [isConfirmed, hash, router, targetGameId, createReceipt]);
 
-  // Testnet-tuned: stakes lowered ~40x from the production tiers (2/10/30) so
-  // dev wallets and small bot vaults (max stake = 10% of vault) can exercise
-  // the full match flow without depositing tens of 0G.
+  // Mainnet tiers. Each stake demands ≥ 10× vault on the matched bot
+  // (enforced by MAX_STAKE_PERCENT in BotINFT.sol).
   const arenas = [
     {
       id: 'sandbox',
       title: 'SANDBOX',
-      stake: '0.05',
-      label: 'TESTING',
-      features: ['Tiny stakes', 'Bot vault 0.5 0G+ covers', 'Dev/testnet only'],
+      stake: '1',
+      label: 'ENTRY',
+      requiredVault: '10',
+      features: ['1 0G stake / match', 'Bot vault 10 0G+ required', '1.85x payout'],
       color: 'border-gray-700',
       hover: 'hover:border-gray-500',
       icon: <Terminal className="w-5 h-5" />
@@ -135,9 +161,10 @@ export default function ArenaPage() {
     {
       id: 'pit',
       title: 'THE PIT',
-      stake: '0.25',
+      stake: '2',
       label: 'COMBAT',
-      features: ['Mid stakes', 'Bot vault 2.5 0G+ covers', 'Active combat'],
+      requiredVault: '20',
+      features: ['2 0G stake / match', 'Bot vault 20 0G+ required', '1.85x payout'],
       color: 'border-primary',
       hover: 'hover:border-blue-400',
       recommended: true,
@@ -146,9 +173,10 @@ export default function ArenaPage() {
     {
       id: 'hightable',
       title: 'HIGH TABLE',
-      stake: '1',
+      stake: '3',
       label: 'ELITE',
-      features: ['Big stakes', 'Bot vault 10 0G+ covers', 'Better rewards'],
+      requiredVault: '30',
+      features: ['3 0G stake / match', 'Bot vault 30 0G+ required', '1.85x payout'],
       color: 'border-red-900',
       hover: 'hover:border-red-700',
       icon: <Trophy className="w-5 h-5" />
@@ -225,7 +253,7 @@ export default function ArenaPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {arenas.map((arena) => {
-            const available = isArenaAvailable(arena.stake);
+            const available = isArenaAvailable(arena.id);
             return (
             <div 
               key={arena.id}
@@ -282,12 +310,20 @@ export default function ArenaPage() {
                 ))}
               </div>
 
-              {/* Pool capacity warning */}
+              {/* Vault liquidity warning */}
               {!available && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg z-10">
-                  <div className="text-center p-4">
-                    <div className="text-yellow-500 text-xs font-bold mb-1">⚠️ ARENA OFFLINE</div>
-                    <div className="text-gray-400 text-[10px]">Try another tier</div>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-lg z-10 px-6">
+                  <div className="text-center">
+                    <div className="text-yellow-500 text-xs font-bold mb-2 tracking-widest">⚠ AWAITING BOT LIQUIDITY</div>
+                    <div className="text-gray-300 text-[11px] leading-relaxed mb-1">
+                      No bot vault meets the<br />
+                      <span className="text-white font-bold">{arena.requiredVault} 0G</span> threshold.
+                    </div>
+                    {arenaStatus && (
+                      <div className="text-gray-500 text-[10px] mt-2">
+                        Largest vault: {parseFloat(arenaStatus.maxVault).toFixed(2)} 0G
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

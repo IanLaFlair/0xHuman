@@ -1,0 +1,178 @@
+[
+  {
+    "provider": "0xd9966e13a6026Fcca4b13E7ff95c94DE268C471C",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-1.integratenetwork.work",
+    "inputPrice": "720000000000",
+    "outputPrice": "4200000000000",
+    "updatedAt": "1777433153",
+    "model": "zai-org/GLM-5-FP8",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"openrouter\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\",\"cacheTokenBilling\":{\"divisor\":5}}",
+    "teeSignerAddress": "0x4C1b546f5Fc11A9c2428eaFEd1D951Aa13C17ee8",
+    "teeSignerAcknowledged": true,
+    "cacheTokenBilling": {
+      "divisor": 5
+    }
+  },
+  {
+    "provider": "0x36aCffCEa3CCe07cAdd1740Ad992dB16Ab324517",
+    "serviceType": "speech-to-text",
+    "url": "https://compute-network-16.integratenetwork.work",
+    "inputPrice": "49000000000",
+    "outputPrice": "114000000000",
+    "updatedAt": "1774794448",
+    "model": "openai/whisper-large-v3",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\"}",
+    "teeSignerAddress": "0x592056E413aB456646a50441e52D5BA89527877D",
+    "teeSignerAcknowledged": true
+  },
+  {
+    "provider": "0x992e6396157Dc4f22E74F2231235D7DE62696db5",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-18.integratenetwork.work",
+    "inputPrice": "800000000000",
+    "outputPrice": "4800000000000",
+    "updatedAt": "1778480573",
+    "model": "qwen3.6-plus",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"aliyun\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.8\",\"tieredPricing\":{\"tiers\":[{\"inputMultiplier\":1,\"maxInputTokens\":256000,\"outputMultiplier\":1},{\"inputMultiplier\":4,\"maxInputTokens\":0,\"outputMultiplier\":2}]}}",
+    "teeSignerAddress": "0xd45b4301940B297F76d6e622c1CeA2AE660617d4",
+    "teeSignerAcknowledged": true,
+    "tieredPricing": {
+      "tiers": [
+        {
+          "maxInputTokens": 256000,
+          "inputMultiplier": 1,
+          "outputMultiplier": 1
+        },
+        {
+          "maxInputTokens": 0,
+          "inputMultiplier": 4,
+          "outputMultiplier": 2
+        }
+      ]
+    }
+  },
+  {
+    "provider": "0x4415ef5CBb415347bb18493af7cE01f225Fc0868",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-3.integratenetwork.work",
+    "inputPrice": "400000000000",
+    "outputPrice": "2400000000000",
+    "updatedAt": "1777433687",
+    "model": "qwen/qwen3-vl-30b-a3b-instruct",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"aliyun\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.8\",\"cacheTokenBilling\":{\"divisor\":5},\"tieredPricing\":{\"tiers\":[{\"inputMultiplier\":1,\"maxInputTokens\":256000,\"outputMultiplier\":1},{\"inputMultiplier\":4,\"maxInputTokens\":0,\"outputMultiplier\":3}]}}",
+    "teeSignerAddress": "0x03716ddFbA77600C33b605FABD2F70Fe89856b0d",
+    "teeSignerAcknowledged": true,
+    "tieredPricing": {
+      "tiers": [
+        {
+          "maxInputTokens": 256000,
+          "inputMultiplier": 1,
+          "outputMultiplier": 1
+        },
+        {
+          "maxInputTokens": 0,
+          "inputMultiplier": 4,
+          "outputMultiplier": 3
+        }
+      ]
+    },
+    "cacheTokenBilling": {
+      "divisor": 5
+    }
+  },
+  {
+    "provider": "0x1B3AAef3ae5050EEE04ea38cD4B087472BD85EB0",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-4.integratenetwork.work",
+    "inputPrice": "910000000000",
+    "outputPrice": "2736000000000",
+    "updatedAt": "1777434347",
+    "model": "deepseek/deepseek-chat-v3-0324",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"aliyun\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\",\"cacheTokenBilling\":{\"divisor\":5}}",
+    "teeSignerAddress": "0x2E79315804e7C8712afcEbF0E31F08174409D806",
+    "teeSignerAcknowledged": true,
+    "cacheTokenBilling": {
+      "divisor": 5
+    }
+  },
+  {
+    "provider": "0xE29a72c7629815Eb480aE5b1F2dfA06f06cdF974",
+    "serviceType": "text-to-image",
+    "url": "https://compute-network-15.integratenetwork.work",
+    "inputPrice": "0",
+    "outputPrice": "3000000000000000",
+    "updatedAt": "1774792662",
+    "model": "z-image",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\"}",
+    "teeSignerAddress": "0x592056E413aB456646a50441e52D5BA89527877D",
+    "teeSignerAcknowledged": true
+  },
+  {
+    "provider": "0x25F8f01cA76060ea40895472b1b79f76613Ca497",
+    "serviceType": "chatbot",
+    "url": "https://5259ae0f38365b27c0bab6301b73691206e32dce-80.dstack-pha-prod5.phala.network",
+    "inputPrice": "1600000000000",
+    "outputPrice": "9000000000000",
+    "updatedAt": "1775715696",
+    "model": "openai/gpt-5.4-mini",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"ghcr.io/0gfoundation/0g-serving-broker@sha256:6c0cea3093b8cfa27a15002351b7d819dc2f648ef9f3be0c5d2a2e1f7582c818\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\"}",
+    "teeSignerAddress": "0x841e738c6D34897FC7F176d3c513151496BFf22d",
+    "teeSignerAcknowledged": true
+  },
+  {
+    "provider": "0x7DCFe6AEa70350C2090041524c9B4A9262DCe87D",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-19.integratenetwork.work",
+    "inputPrice": "934000000000",
+    "outputPrice": "7800000000000",
+    "updatedAt": "1777444543",
+    "model": "zai-org/GLM-5.1-FP8",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.4\",\"cacheTokenBilling\":{\"divisor\":5}}",
+    "teeSignerAddress": "0xA46EA4FC5889AD35A1487e1Ed04dCcfa872146B9",
+    "teeSignerAcknowledged": true,
+    "cacheTokenBilling": {
+      "divisor": 5
+    }
+  },
+  {
+    "provider": "0x4870CbC4D07d6Ac2EE5aA865588e5985FE77a4E9",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-20.integratenetwork.work",
+    "inputPrice": "280000000000",
+    "outputPrice": "1690000000000",
+    "updatedAt": "1778502003",
+    "model": "0GM-1.0-35B-A3B",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":false,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.5\",\"cacheTokenBilling\":{\"divisor\":3}}",
+    "teeSignerAddress": "0xE48a633824a73076B06e8fA92e628a16cd805935",
+    "teeSignerAcknowledged": true,
+    "cacheTokenBilling": {
+      "divisor": 3
+    }
+  },
+  {
+    "provider": "0xB01EBd79c3fd63ff52fD47C3935119601EEe2FdB",
+    "serviceType": "chatbot",
+    "url": "https://compute-network-21.integratenetwork.work",
+    "inputPrice": "4210000000000",
+    "outputPrice": "8430000000000",
+    "updatedAt": "1778502974",
+    "model": "deepseek-v4-pro",
+    "verifiability": "TeeML",
+    "additionalInfo": "{\"ImageDigest\":\"\",\"ImageName\":\"\",\"ProviderIdentity\":\"aliyun\",\"ProviderType\":\"centralized\",\"TEEVerifier\":\"dstack\",\"TargetSeparated\":true,\"TargetTeeAddress\":\"\",\"VerifierURL\":\"https://github.com/Dstack-TEE/dstack/releases/tag/verifier-v0.5.8\",\"cacheTokenBilling\":{\"divisor\":12}}",
+    "teeSignerAddress": "0x4386909Ef321651ab78298Ae454A05FF5d354118",
+    "teeSignerAcknowledged": true,
+    "cacheTokenBilling": {
+      "divisor": 12
+    }
+  }
+]

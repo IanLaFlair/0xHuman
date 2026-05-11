@@ -587,8 +587,13 @@ function personaSlugForBot(tokenId: number): string {
 
 /**
  * Fetch + decrypt + parse a bot's memory blob from 0G Storage.
- * Returns empty memory if not yet set or decryption fails.
+ * Returns empty memory if not yet set, decryption fails, or storage is
+ * slow. Galileo storage nodes intermittently lag (the SDK loops with
+ * "Waiting for storage node to sync") so we cap the wait — the match
+ * flow has to keep moving even without past lessons.
  */
+const BOT_MEMORY_TIMEOUT_MS = 8_000;
+
 async function loadBotMemory(tokenId: number): Promise<BotMemory> {
     try {
         const b = await botContract.bots(BigInt(tokenId));
@@ -596,12 +601,23 @@ async function loadBotMemory(tokenId: number): Promise<BotMemory> {
         if (!memoryURI || !personaKey) return emptyMemory(tokenId);
 
         const rootHash = memoryURI.replace('og-storage://', '');
-        const result = await downloadEncrypted<BotMemory>(storageCfg, rootHash, personaKey);
+        const result = await withTimeout(
+            downloadEncrypted<BotMemory>(storageCfg, rootHash, personaKey),
+            BOT_MEMORY_TIMEOUT_MS,
+            `0G Storage download (rootHash=${rootHash.slice(0, 10)}…)`,
+        );
         return result.data;
     } catch (e) {
         console.warn(`loadBotMemory(${tokenId}) failed, using empty:`, (e as Error).message);
         return emptyMemory(tokenId);
     }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+        p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+    });
 }
 
 /**
@@ -622,16 +638,28 @@ async function persistBotMemory(tokenId: number, memory: BotMemory): Promise<voi
 
 /**
  * Upload chat transcript to 0G Storage and anchor the hash on-chain.
+ * Wrapped in a 12s timeout so storage-node sync lag can't block resolution
+ * post-processing. Anchoring is best-effort — if it fails the game itself
+ * is still resolved and the player still sees their reveal.
  */
+const TRANSCRIPT_TIMEOUT_MS = 12_000;
+
 async function persistTranscript(gameId: number, transcript: MatchTranscriptEntry[]): Promise<{ uri: string; hash: string } | null> {
     try {
         const blob = { gameId, transcript, anchoredAt: Date.now() };
-        const upload = await uploadJSON(storageCfg, blob);
+        const upload = await withTimeout(
+            uploadJSON(storageCfg, blob),
+            TRANSCRIPT_TIMEOUT_MS,
+            `transcript upload for game ${gameId}`,
+        );
         const uri = `og-storage://${upload.rootHash}`;
         const hash = '0x' + ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(blob))).slice(2);
         const tx = await oxhuman.anchorChatLog(BigInt(gameId), hash, uri);
-        await tx.wait();
-        console.log(`📜 Game ${gameId} transcript anchored: ${uri}`);
+        // Don't await tx.wait() — anchoring is fire-and-forget.
+        tx.wait().then(
+            () => console.log(`📜 Game ${gameId} transcript anchored: ${uri}`),
+            (e: Error) => console.warn(`anchorChatLog wait failed for game ${gameId}: ${e.message}`),
+        );
         return { uri, hash };
     } catch (e) {
         console.error(`persistTranscript(${gameId}) failed:`, (e as Error).message);
@@ -758,6 +786,49 @@ async function waitForPvEConversion(opts: {
     throw new Error(`waitForPvEConversion timed out after ${timeoutMs}ms (tx ${tx.hash})`);
 }
 
+/**
+ * Same receipt-flake tolerance as waitForPvEConversion, but for resolution.
+ * Polls games(gameId).status — status 2 == Resolved. resolveWithSignatures
+ * is also idempotent (contract reverts on double-resolution), so retrying
+ * via state poll is safe.
+ */
+async function waitForGameResolution(opts: {
+    gameId: number;
+    tx: any;
+    oxhuman: any;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+}): Promise<void> {
+    const { gameId, tx, oxhuman } = opts;
+    const pollIntervalMs = opts.pollIntervalMs ?? 2_000;
+    const timeoutMs = opts.timeoutMs ?? 30_000;
+
+    try {
+        await tx.wait();
+        return;
+    } catch (waitErr) {
+        const msg = (waitErr as Error).message ?? '';
+        const isReceiptFlake =
+            msg.includes('no matching receipts') ||
+            msg.includes('could not coalesce') ||
+            msg.includes('UNKNOWN_ERROR');
+        if (!isReceiptFlake) throw waitErr;
+        console.warn(`tx.wait() flaked for game ${gameId} resolve (${tx.hash}); polling status...`);
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        try {
+            const g = await oxhuman.games(BigInt(gameId));
+            if (Number(g.status) === 2) return; // GameStatus.Resolved
+        } catch {
+            // ignore transient read errors and retry
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
+    throw new Error(`waitForGameResolution timed out after ${timeoutMs}ms (tx ${tx.hash})`);
+}
+
 // ============ Bot orchestration ============
 
 async function sendBotReply(gameId: number, userMessage: string): Promise<void> {
@@ -832,8 +903,10 @@ async function _resolveGame(gameId: number): Promise<string | null> {
             state.votes.p2.guessedBot,
             state.votes.p2.signature,
         );
-        const rcpt = await tx.wait();
-        console.log(`✅ Game ${gameId} resolved in tx ${rcpt.hash}`);
+        // Same Galileo RPC flake as convertToPvE — receipts occasionally
+        // disappear right after mining. Fall back to polling game.status.
+        await waitForGameResolution({ gameId, tx, oxhuman });
+        console.log(`✅ Game ${gameId} resolved (tx ${tx.hash})`);
 
         // EXP awarding (keep PostgreSQL flow)
         try {

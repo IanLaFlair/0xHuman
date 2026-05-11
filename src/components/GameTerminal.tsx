@@ -136,6 +136,14 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
         console.log("Opponent joined! Match starting...", data);
         addSystemMessage("MATCH FOUND. CONNECTING...");
     });
+
+    // Backend couldn't bind a bot (RPC flake, no eligible bot, etc).
+    // Surface a system message so the player aborts instead of waiting silently.
+    socket.on("match_error", (data: { gameId: number; code: string; message: string }) => {
+        console.error("Match error:", data);
+        addSystemMessage(`⚠ ${data.message} (${data.code})`);
+        addSystemMessage("Click ABORT LINK to refund your stake and try again.");
+    });
     
     // Listen for vote confirmation - only update if this is the player's own vote
     // Note: This is for optimistic UI update after local signing

@@ -677,7 +677,13 @@ async function startMatchmakerTimer(gameId: number, stake: bigint): Promise<void
 
             const tx = await oxhuman.convertToPvE(BigInt(gameId), BigInt(tokenId));
             const [memory, game] = await Promise.all([memoryPromise, gameOnChainPromise]);
-            await tx.wait();
+
+            // Galileo RPC nodes intermittently return "no matching receipts found"
+            // for a freshly-mined tx, which makes tx.wait() reject with a noisy
+            // UNKNOWN_ERROR even though the tx eventually lands. Fall back to
+            // polling the contract directly — the source of truth is the game
+            // mode flipping to PvE.
+            await waitForPvEConversion({ gameId, tx, oxhuman });
             console.log(`🤖 Game ${gameId}: converted to PvE with bot ${tokenId}`);
 
             const opponent = (game.player1 as string).toLowerCase();
@@ -698,8 +704,58 @@ async function startMatchmakerTimer(gameId: number, stake: bigint): Promise<void
             setTimeout(() => sendBotReply(gameId, '__OPENER__'), 5000 + Math.random() * 3000);
         } catch (e) {
             console.error(`convertToPvE(${gameId}, ${tokenId}) failed:`, (e as Error).message);
+            // Tell the client so the chat doesn't sit there forever.
+            io.to(gameId.toString()).emit('match_error', {
+                gameId,
+                code: 'CONVERT_TO_PVE_FAILED',
+                message: 'Could not bind a bot to this match. Try aborting and re-queueing.',
+            });
         }
     }, MATCHMAKER_TIMEOUT_MS);
+}
+
+/**
+ * Confirm that a convertToPvE tx landed, even when the RPC drops the
+ * receipt. We first try tx.wait() (cheap when it works), then poll
+ * games(gameId).mode for up to ~30s. Either path is enough — the tx is
+ * idempotent on chain (the contract reverts if the game is already PvE),
+ * and the bot session only spins up after mode == PvE.
+ */
+async function waitForPvEConversion(opts: {
+    gameId: number;
+    tx: any;
+    oxhuman: any;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+}): Promise<void> {
+    const { gameId, tx, oxhuman } = opts;
+    const pollIntervalMs = opts.pollIntervalMs ?? 2_000;
+    const timeoutMs = opts.timeoutMs ?? 30_000;
+
+    try {
+        await tx.wait();
+        return;
+    } catch (waitErr) {
+        const msg = (waitErr as Error).message ?? '';
+        const isReceiptFlake =
+            msg.includes('no matching receipts') ||
+            msg.includes('could not coalesce') ||
+            msg.includes('UNKNOWN_ERROR');
+        if (!isReceiptFlake) throw waitErr;
+        console.warn(`tx.wait() flaked for game ${gameId} (${tx.hash}); polling contract state...`);
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        try {
+            const g = await oxhuman.games(BigInt(gameId));
+            if (Number(g.mode) === 1) return; // GameMode.PvE
+        } catch {
+            // ignore transient read errors and retry
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+    }
+    throw new Error(`waitForPvEConversion timed out after ${timeoutMs}ms (tx ${tx.hash})`);
 }
 
 // ============ Bot orchestration ============

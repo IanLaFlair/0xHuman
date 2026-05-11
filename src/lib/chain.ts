@@ -47,16 +47,21 @@ const ADDRESSES_BY_CHAIN: Record<number, DeploymentAddresses> = {
         BotINFT: '0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e',
     },
     16661: {
-        // Mainnet — populated after the Day 9 deploy
+        // Mainnet — populated by scripts/launch-mainnet.ts after deploy
         OxHuman: '0x0000000000000000000000000000000000000000',
         BotINFT: '0x0000000000000000000000000000000000000000',
     },
 };
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 export function getAddresses(chainId: number): DeploymentAddresses {
     const addrs = ADDRESSES_BY_CHAIN[chainId];
     if (!addrs) {
         throw new Error(`No 0xHuman deployment configured for chain ${chainId}`);
+    }
+    if (addrs.OxHuman === ZERO_ADDRESS || addrs.BotINFT === ZERO_ADDRESS) {
+        throw new Error(`Chain ${chainId} addresses not yet populated — run the deploy script first`);
     }
     return addrs;
 }

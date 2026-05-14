@@ -30,8 +30,9 @@ export const DEFAULT_TESTNET_CONFIG = {
 
 export const DEFAULT_MAINNET_CONFIG = {
     evmRpc: 'https://evmrpc.0g.ai',
-    // Mainnet indexer URL — verify with 0G docs before production use
-    indexerRpc: 'https://indexer-storage.0g.ai',
+    // 0G mainnet "Turbo" storage indexer — source: docs.0g.ai mainnet overview.
+    // Standard network has a separate (slower, cheaper) indexer not used here.
+    indexerRpc: 'https://indexer-storage-turbo.0g.ai',
 };
 
 // ============ Types ============

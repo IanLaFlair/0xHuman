@@ -133,16 +133,31 @@ export default function CustomConnectButton() {
                           <p className="text-xs font-bold text-white">Switch Networks</p>
                         </div>
                         
-                        {/* 0G Mainnet - Coming Soon */}
-                        <div className="flex items-center justify-between px-4 py-3 opacity-50 cursor-not-allowed">
+                        {/* 0G Mainnet */}
+                        <button
+                          onClick={() => {
+                            if (chainId !== zeroGMainnet.id) {
+                              switchChain({ chainId: zeroGMainnet.id });
+                            }
+                            setIsNetworkOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors ${chainId === zeroGMainnet.id ? 'bg-primary/10' : ''}`}
+                        >
                           <div className="flex items-center gap-3">
                             <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center overflow-hidden">
                               <span className="text-black font-bold text-[10px]">0G</span>
                             </div>
-                            <span className="text-sm text-gray-400">0G</span>
+                            <div className="flex flex-col items-start">
+                              <span className="text-sm text-white">0G</span>
+                              <span className="text-[10px] text-gray-500">(Mainnet)</span>
+                            </div>
                           </div>
-                          <span className="text-[10px] text-yellow-500 font-bold px-2 py-0.5 bg-yellow-500/10 rounded">COMING SOON</span>
-                        </div>
+                          {chainId === zeroGMainnet.id && (
+                            <span className="text-[10px] text-green-500 font-bold px-2 py-0.5 bg-green-500/10 rounded flex items-center gap-1">
+                              Connected <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                            </span>
+                          )}
+                        </button>
 
                         {/* 0G Galileo Testnet - Active */}
                         <button

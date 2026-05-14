@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Clock, AlertTriangle, User, Bot, Wifi, Shield, Terminal, X, CheckCircle, AlertOctagon, Swords, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAccount, useSignMessage, usePublicClient, useChainId } from 'wagmi';
-import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
+import { getAddresses, DEFAULT_CHAIN_ID, explorerBaseUrl } from '@/lib/chain';
 import BotINFTABI from '@/contracts/BotINFTABI.json';
 import { useGameStatus, useJoinGame, useClaimWinnings, useWinningsBalance } from '@/hooks/useOxHuman';
 import { formatEther, keccak256, encodePacked, toHex } from 'viem';
@@ -727,7 +727,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
              </p>
              {resolutionTxHash && (
                <a
-                 href={`https://chainscan-galileo.0g.ai/tx/${resolutionTxHash}`}
+                 href={`${explorerBaseUrl(chainIdLive)}/tx/${resolutionTxHash}`}
                  target="_blank"
                  rel="noopener noreferrer"
                  className="text-xs text-gray-500 hover:text-primary transition-colors"
@@ -769,7 +769,7 @@ export default function GameTerminal({ arenaId, stakeAmount }: { arenaId: string
                      <div>
                        Token #{reveal.botTokenId} •{' '}
                        <a
-                         href={`https://chainscan-galileo.0g.ai/token/0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e?a=${reveal.botTokenId}`}
+                         href={`${explorerBaseUrl(chainIdLive)}/token/${(() => { try { return getAddresses(chainIdLive).BotINFT; } catch { return getAddresses(DEFAULT_CHAIN_ID).BotINFT; } })()}?a=${reveal.botTokenId}`}
                          target="_blank"
                          rel="noopener noreferrer"
                          className="text-primary hover:underline"

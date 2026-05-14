@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { Trophy, Search, User, ArrowUpRight, ExternalLink } from 'lucide-react';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
+import { explorerBaseUrl } from '@/lib/chain';
 
 interface LeaderboardRow {
     address: string;
@@ -30,6 +31,7 @@ export default function LeaderboardPage() {
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const { address } = useAccount();
+    const chainId = useChainId();
 
     useEffect(() => {
         setMounted(true);
@@ -168,7 +170,7 @@ export default function LeaderboardPage() {
                                                             {isMe && <span className="text-[10px] text-primary">(you)</span>}
                                                         </div>
                                                         <a
-                                                            href={`https://chainscan-galileo.0g.ai/address/${row.address}`}
+                                                            href={`${explorerBaseUrl(chainId)}/address/${row.address}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="text-[10px] text-gray-500 hover:text-primary inline-flex items-center gap-1"

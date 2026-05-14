@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { ArrowLeft, Bot, Coins, Trophy, TrendingDown, Plus, Flame, ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
+import { getAddresses, DEFAULT_CHAIN_ID, explorerBaseUrl } from '@/lib/chain';
 import BotINFTABI from '@/contracts/BotINFTABI.json';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3001';
@@ -41,12 +41,17 @@ export default function MyBotsPage() {
     const [bots, setBots] = useState<BotEntry[]>([]);
     const [hashMeta, setHashMeta] = useState<Record<string, PersonaMeta>>({});
     const [loading, setLoading] = useState(false);
+    // Bumped by BotCard after a vault deposit/withdraw lands, triggering a
+    // fresh read of `bots(tokenId)` so the UI shows the new vault balance
+    // and arena-coverage badges without a manual page refresh.
+    const [refreshTick, setRefreshTick] = useState(0);
+    const bumpRefresh = () => setRefreshTick((t) => t + 1);
 
     const botAddr = (() => {
         try { return getAddresses(chainId).BotINFT; } catch { return getAddresses(DEFAULT_CHAIN_ID).BotINFT; }
     })();
 
-    const { data: nextTokenId } = useReadContract({
+    const { data: nextTokenId, refetch: refetchNextTokenId } = useReadContract({
         address: botAddr,
         abi: BotINFTABI,
         functionName: 'nextTokenId',
@@ -113,7 +118,7 @@ export default function MyBotsPage() {
         }
         loadBots();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [address, nextTokenId, publicClient, botAddr]);
+    }, [address, nextTokenId, publicClient, botAddr, refreshTick]);
 
     return (
         <div className="min-h-screen bg-black text-white">
@@ -161,7 +166,16 @@ export default function MyBotsPage() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {bots.map((b) => (
-                            <BotCard key={String(b.tokenId)} bot={b} botAddr={botAddr} hashMeta={hashMeta} />
+                            <BotCard
+                                key={String(b.tokenId)}
+                                bot={b}
+                                botAddr={botAddr}
+                                hashMeta={hashMeta}
+                                onTxConfirmed={() => {
+                                    bumpRefresh();
+                                    refetchNextTokenId();
+                                }}
+                            />
                         ))}
                     </div>
                 )}
@@ -170,12 +184,30 @@ export default function MyBotsPage() {
     );
 }
 
-function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${string}`; hashMeta: Record<string, PersonaMeta> }) {
+function BotCard({ bot, botAddr, hashMeta, onTxConfirmed }: {
+    bot: BotEntry;
+    botAddr: `0x${string}`;
+    hashMeta: Record<string, PersonaMeta>;
+    onTxConfirmed?: () => void;
+}) {
     const { writeContract, data: hash, isPending } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
     const [showActions, setShowActions] = useState(false);
     const [depositAmount, setDepositAmount] = useState('');
     const [withdrawAmount, setWithdrawAmount] = useState('');
+    const chainId = useChainId();
+
+    // Pick the right block explorer for the active chain.
+    const explorerBase = explorerBaseUrl(chainId);
+
+    // Bump parent refresh whenever a write tx lands.
+    useEffect(() => {
+        if (isConfirmed) {
+            onTxConfirmed?.();
+            setDepositAmount('');
+            setWithdrawAmount('');
+        }
+    }, [isConfirmed, onTxConfirmed]);
 
     // Resolve persona by personalityHash via the backend hashmap
     const persona = hashMeta[bot.personalityHash.toLowerCase()];
@@ -254,7 +286,7 @@ function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${stri
                         <div className="flex items-center gap-3 text-[10px] text-gray-500">
                             <span>Token #{String(bot.tokenId)} • Slot {bot.slot}</span>
                             <a
-                                href={`https://chainscan-galileo.0g.ai/token/${botAddr}?a=${bot.tokenId}`}
+                                href={`${explorerBase}/token/${botAddr}?a=${bot.tokenId}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:text-primary inline-flex items-center gap-1"
@@ -380,7 +412,7 @@ function BotCard({ bot, botAddr, hashMeta }: { bot: BotEntry; botAddr: `0x${stri
                         </button>
                         {hash && (
                             <a
-                                href={`https://chainscan-galileo.0g.ai/tx/${hash}`}
+                                href={`${explorerBase}/tx/${hash}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[10px] text-primary hover:underline inline-flex items-center gap-1"

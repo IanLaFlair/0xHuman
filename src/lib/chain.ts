@@ -70,3 +70,13 @@ export function getAddresses(chainId: number): DeploymentAddresses {
  * Default chain for the frontend. Toggle via env at build time.
  */
 export const DEFAULT_CHAIN_ID = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' ? 16661 : 16602;
+
+/**
+ * Block explorer base URL for the given chain. Used by every link that
+ * points to an address / tx / token on 0G — keep the hardcoded testnet
+ * domain (`chainscan-galileo.0g.ai`) out of the rest of the codebase.
+ */
+export function explorerBaseUrl(chainId: number): string {
+    if (chainId === 16661) return 'https://chainscan.0g.ai';
+    return 'https://chainscan-galileo.0g.ai';
+}

@@ -8,7 +8,7 @@ import { Loader2, Bot, Coins, Lock, Sparkles, ArrowLeft, ExternalLink, CheckCirc
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { getAddresses, DEFAULT_CHAIN_ID } from '@/lib/chain';
+import { getAddresses, DEFAULT_CHAIN_ID, explorerBaseUrl } from '@/lib/chain';
 import BotINFTABI from '@/contracts/BotINFTABI.json';
 
 interface Persona {
@@ -418,7 +418,7 @@ export default function CreateBotPage() {
                             <Sparkles className="w-5 h-5" /> Bot minted
                         </div>
                         <div className="space-y-2 text-sm text-gray-300 mb-4">
-                            <div>Tx: <a href={`https://chainscan-galileo.0g.ai/tx/${receipt.transactionHash}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline inline-flex items-center gap-1">{receipt.transactionHash.slice(0, 10)}…<ExternalLink className="w-3 h-3" /></a></div>
+                            <div>Tx: <a href={`${explorerBaseUrl(chainId)}/tx/${receipt.transactionHash}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline inline-flex items-center gap-1">{receipt.transactionHash.slice(0, 10)}…<ExternalLink className="w-3 h-3" /></a></div>
                             <div>Persona: {personas.find((p) => p.slug === selected)?.name}</div>
                             <div>Slot: {cfg.label}</div>
                         </div>

@@ -47,9 +47,9 @@ const ADDRESSES_BY_CHAIN: Record<number, DeploymentAddresses> = {
         BotINFT: '0xdFd56b56A65C44Dd0fd3CC3d85580efF93594b8e',
     },
     16661: {
-        // Mainnet — populated by scripts/launch-mainnet.ts after deploy
-        OxHuman: '0x0000000000000000000000000000000000000000',
-        BotINFT: '0x0000000000000000000000000000000000000000',
+        // Mainnet — deployed via scripts/launch-mainnet.cjs
+        OxHuman: '0x062f1923Deb717A5d8D3e9Ed0e8C69b3eB63BC5f',
+        BotINFT: '0x5298e0d0Fdf8c15538B901De4c0e9b7273957a98',
     },
 };
 

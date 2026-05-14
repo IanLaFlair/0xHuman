@@ -44,6 +44,9 @@ const DRY_RUN = readEnv('DRY_RUN', '0') === '1';
 const CONFIRM_MAINNET = readEnv('CONFIRM_MAINNET', '');
 const PERSONA_SLUG = readEnv('PERSONA_SLUG', 'mochi');
 const INITIAL_VAULT_STR = readEnv('INITIAL_VAULT', '30');
+// Set SKIP_MINT=1 when the seed bot will be minted via the /bots/create UI
+// instead. Useful when the deployer wants to pick the persona interactively.
+const SKIP_MINT = readEnv('SKIP_MINT', '0') === '1';
 
 // ============ Main ============
 
@@ -82,14 +85,18 @@ async function main() {
     const [deployer] = await ethers.getSigners();
     const balanceBefore = await ethers.provider.getBalance(deployer.address);
     const initialVault = ethers.parseEther(INITIAL_VAULT_STR);
-    // Rough budget: deploy gas + initialVault + 2 0G safety
-    const minBalance = ethers.parseEther(String(Number(INITIAL_VAULT_STR) + 2.5));
+    // Rough budget: deploy gas + (vault if minting) + 2 0G safety
+    const vaultBudget = SKIP_MINT ? 0 : Number(INITIAL_VAULT_STR);
+    const minBalance = ethers.parseEther(String(vaultBudget + 2.5));
 
     console.log(`Network:        ${network} (chainId ${chainId})`);
     console.log(`Deployer:       ${deployer.address}`);
     console.log(`Balance:        ${ethers.formatEther(balanceBefore)} 0G`);
-    console.log(`Initial vault:  ${INITIAL_VAULT_STR} 0G`);
-    console.log(`Persona slug:   ${PERSONA_SLUG}`);
+    console.log(`Skip mint:      ${SKIP_MINT}`);
+    if (!SKIP_MINT) {
+        console.log(`Initial vault:  ${INITIAL_VAULT_STR} 0G`);
+        console.log(`Persona slug:   ${PERSONA_SLUG}`);
+    }
     console.log(`Dry-run:        ${DRY_RUN}\n`);
 
     if (balanceBefore < minBalance) {
@@ -106,16 +113,19 @@ async function main() {
         }
     }
 
-    // ----- Read persona before any tx -----
-    const personaPath = path.resolve(process.cwd(), `data/personas/${PERSONA_SLUG}.json`);
-    if (!fs.existsSync(personaPath)) {
-        throw new Error(`Persona file not found: ${personaPath}`);
+    // ----- Read persona before any tx (only when minting) -----
+    let persona = null;
+    if (!SKIP_MINT) {
+        const personaPath = path.resolve(process.cwd(), `data/personas/${PERSONA_SLUG}.json`);
+        if (!fs.existsSync(personaPath)) {
+            throw new Error(`Persona file not found: ${personaPath}`);
+        }
+        persona = JSON.parse(fs.readFileSync(personaPath, 'utf8'));
+        console.log(`Persona loaded: ${persona.name} — "${persona.tagline}"\n`);
     }
-    const persona = JSON.parse(fs.readFileSync(personaPath, 'utf8'));
-    console.log(`Persona loaded: ${persona.name} — "${persona.tagline}"\n`);
 
     if (DRY_RUN) {
-        console.log('[DRY-RUN] Would deploy BotINFT + OxHuman, mint persona, fund vault.');
+        console.log('[DRY-RUN] Would deploy BotINFT + OxHuman' + (SKIP_MINT ? '.' : ', mint persona, fund vault.'));
         console.log('[DRY-RUN] No transactions sent. Re-run without DRY_RUN=1 to execute.\n');
         return;
     }
@@ -149,81 +159,93 @@ async function main() {
     await (await botINFT.setGameContract(oxAddr)).wait();
     console.log(`✓ Wired (${Date.now() - wt0}ms)\n`);
 
-    // ----- 4. Upload encrypted persona to 0G Storage -----
-    console.log('=== Uploading persona to 0G Storage ===');
-    const personaKeyHex = readEnv('PERSONA_KEY_HEX', '');
-    const symmetricKey = personaKeyHex
-        ? Buffer.from(personaKeyHex, 'hex')
-        : require('crypto').randomBytes(32);
-    if (!personaKeyHex) {
-        console.log(`  ⚠ Generated fresh AES-256 key. PERSIST IT or the bot is unusable:`);
-        console.log(`    PERSONA_KEY_HEX=${symmetricKey.toString('hex')}`);
-    }
-
-    // Lazy-load storage module (ESM via createRequire) inside .cjs context
-    const { spawnSync } = require('child_process');
-    const personaJson = JSON.stringify(persona);
-    const tmpPath = path.resolve(process.cwd(), `.tmp-persona-${PERSONA_SLUG}.json`);
-    fs.writeFileSync(tmpPath, personaJson);
-
-    const uploaderArgs = [
-        'tsx',
-        path.resolve(process.cwd(), 'scripts/internal/upload-persona-helper.ts'),
-        '--persona',
-        tmpPath,
-        '--key',
-        symmetricKey.toString('hex'),
-        '--network',
-        isMainnet ? 'mainnet' : 'testnet',
-    ];
-    const uploadResult = spawnSync('npx', uploaderArgs, {
-        encoding: 'utf8',
-        env: {
-            ...process.env,
-            STORAGE_PRIVATE_KEY: process.env.PRIVATE_KEY,
-        },
-    });
-    fs.unlinkSync(tmpPath);
-    if (uploadResult.status !== 0) {
-        console.error(uploadResult.stderr);
-        throw new Error('persona upload helper failed');
-    }
-    const uploadOutput = JSON.parse(uploadResult.stdout.trim().split('\n').pop());
-    const { rootHash, txHash: uploadTx, sizeBytes } = uploadOutput;
-    const personalityHash = ethers.keccak256(ethers.toUtf8Bytes(personaJson));
-    console.log(`✓ Storage rootHash: ${rootHash}`);
-    console.log(`✓ Storage tx:       ${uploadTx}`);
-    console.log(`✓ Size:             ${sizeBytes} bytes`);
-    console.log(`✓ personalityHash:  ${personalityHash}\n`);
-
-    // ----- 5. Mint free-slot bot -----
-    console.log(`=== Minting free-slot bot with ${INITIAL_VAULT_STR} 0G vault ===`);
-    const mintTx = await botINFT.mintFreeSlot(rootHash, personalityHash, { value: initialVault });
-    const mintRcpt = await mintTx.wait();
-    // Parse BotMinted event for tokenId
     let tokenId = null;
-    for (const log of mintRcpt.logs) {
-        try {
-            const parsed = botINFT.interface.parseLog(log);
-            if (parsed && parsed.name === 'BotMinted') {
-                tokenId = parsed.args.tokenId;
-                break;
-            }
-        } catch {
-            // ignore non-matching logs
-        }
-    }
-    if (tokenId === null) throw new Error('Could not find BotMinted event in receipt');
-    console.log(`✓ Bot minted: tokenId=${tokenId.toString()}, owner=${deployer.address}`);
-    console.log(`  mint tx: ${mintRcpt.hash}, gas: ${mintRcpt.gasUsed}\n`);
+    let rootHash = null;
+    let personalityHash = null;
+    let symmetricKey = null;
+    let botData = null;
 
-    // ----- 6. Sanity reads -----
-    const botData = await botINFT.bots(tokenId);
-    console.log('=== Bot state ===');
-    console.log(`  vaultBalance:   ${ethers.formatEther(botData.vaultBalance)} 0G`);
-    console.log(`  slot:           ${botData.slot}`);
-    console.log(`  tier:           ${botData.tier === 1n ? 'Verified' : 'Rookie'}`);
-    console.log(`  personalityURI: ${botData.personalityURI}\n`);
+    if (!SKIP_MINT) {
+        // ----- 4. Upload encrypted persona to 0G Storage -----
+        console.log('=== Uploading persona to 0G Storage ===');
+        const personaKeyHex = readEnv('PERSONA_KEY_HEX', '');
+        symmetricKey = personaKeyHex
+            ? Buffer.from(personaKeyHex, 'hex')
+            : require('crypto').randomBytes(32);
+        if (!personaKeyHex) {
+            console.log(`  ⚠ Generated fresh AES-256 key. PERSIST IT or the bot is unusable:`);
+            console.log(`    PERSONA_KEY_HEX=${symmetricKey.toString('hex')}`);
+        }
+
+        // Lazy-load storage module (ESM via createRequire) inside .cjs context
+        const { spawnSync } = require('child_process');
+        const personaJson = JSON.stringify(persona);
+        const tmpPath = path.resolve(process.cwd(), `.tmp-persona-${PERSONA_SLUG}.json`);
+        fs.writeFileSync(tmpPath, personaJson);
+
+        const uploaderArgs = [
+            'tsx',
+            path.resolve(process.cwd(), 'scripts/internal/upload-persona-helper.ts'),
+            '--persona',
+            tmpPath,
+            '--key',
+            symmetricKey.toString('hex'),
+            '--network',
+            isMainnet ? 'mainnet' : 'testnet',
+        ];
+        const uploadResult = spawnSync('npx', uploaderArgs, {
+            encoding: 'utf8',
+            env: {
+                ...process.env,
+                STORAGE_PRIVATE_KEY: process.env.PRIVATE_KEY,
+            },
+        });
+        fs.unlinkSync(tmpPath);
+        if (uploadResult.status !== 0) {
+            console.error(uploadResult.stderr);
+            throw new Error('persona upload helper failed');
+        }
+        const uploadOutput = JSON.parse(uploadResult.stdout.trim().split('\n').pop());
+        rootHash = uploadOutput.rootHash;
+        const { txHash: uploadTx, sizeBytes } = uploadOutput;
+        personalityHash = ethers.keccak256(ethers.toUtf8Bytes(personaJson));
+        console.log(`✓ Storage rootHash: ${rootHash}`);
+        console.log(`✓ Storage tx:       ${uploadTx}`);
+        console.log(`✓ Size:             ${sizeBytes} bytes`);
+        console.log(`✓ personalityHash:  ${personalityHash}\n`);
+
+        // ----- 5. Mint free-slot bot -----
+        console.log(`=== Minting free-slot bot with ${INITIAL_VAULT_STR} 0G vault ===`);
+        const mintTx = await botINFT.mintFreeSlot(rootHash, personalityHash, { value: initialVault });
+        const mintRcpt = await mintTx.wait();
+        // Parse BotMinted event for tokenId
+        for (const log of mintRcpt.logs) {
+            try {
+                const parsed = botINFT.interface.parseLog(log);
+                if (parsed && parsed.name === 'BotMinted') {
+                    tokenId = parsed.args.tokenId;
+                    break;
+                }
+            } catch {
+                // ignore non-matching logs
+            }
+        }
+        if (tokenId === null) throw new Error('Could not find BotMinted event in receipt');
+        console.log(`✓ Bot minted: tokenId=${tokenId.toString()}, owner=${deployer.address}`);
+        console.log(`  mint tx: ${mintRcpt.hash}, gas: ${mintRcpt.gasUsed}\n`);
+
+        // ----- 6. Sanity reads -----
+        botData = await botINFT.bots(tokenId);
+        console.log('=== Bot state ===');
+        console.log(`  vaultBalance:   ${ethers.formatEther(botData.vaultBalance)} 0G`);
+        console.log(`  slot:           ${botData.slot}`);
+        console.log(`  tier:           ${botData.tier === 1n ? 'Verified' : 'Rookie'}`);
+        console.log(`  personalityURI: ${botData.personalityURI}\n`);
+    } else {
+        console.log('=== Skipping persona upload + bot mint (SKIP_MINT=1) ===');
+        console.log('   Mint your seed bot via /bots/create after the frontend is\n');
+        console.log('   pointed at the new mainnet addresses.\n');
+    }
 
     // ----- 7. Write deployment record -----
     const balanceAfter = await ethers.provider.getBalance(deployer.address);
@@ -234,7 +256,7 @@ async function main() {
         deployedAt: new Date().toISOString(),
         deployer: deployer.address,
         contracts: { BotINFT: botAddr, OxHuman: oxAddr },
-        seedBot: {
+        seedBot: tokenId === null ? null : {
             tokenId: tokenId.toString(),
             personalityURI: rootHash,
             personalityHash,
@@ -257,7 +279,11 @@ async function main() {
     console.log(`Remaining:   ${ethers.formatEther(balanceAfter)} 0G`);
     console.log(`\nBotINFT:    ${record.explorerBaseUrl}/address/${botAddr}`);
     console.log(`OxHuman:    ${record.explorerBaseUrl}/address/${oxAddr}`);
-    console.log(`Bot #${tokenId}:   ${record.explorerBaseUrl}/token/${botAddr}?a=${tokenId}\n`);
+    if (tokenId !== null) {
+        console.log(`Bot #${tokenId}:   ${record.explorerBaseUrl}/token/${botAddr}?a=${tokenId}\n`);
+    } else {
+        console.log(`Seed bot:   (not minted — use the /bots/create UI)\n`);
+    }
 
     if (isMainnet) {
         console.log(`=== NEXT STEPS ===`);
@@ -268,10 +294,17 @@ async function main() {
         console.log(`     NETWORK=mainnet`);
         console.log(`     OXHUMAN_ADDRESS=${oxAddr}`);
         console.log(`     BOTINFT_ADDRESS=${botAddr}`);
-        console.log(`     PERSONA_KEY_HEX=${symmetricKey.toString('hex')}`);
+        if (symmetricKey) {
+            console.log(`     PERSONA_KEY_HEX=${symmetricKey.toString('hex')}`);
+        } else {
+            console.log(`     PERSONA_KEY_HEX=<re-use existing or generate fresh>`);
+        }
         console.log(`\n3. On VPS: git pull && npm run build && pm2 restart all`);
         console.log(`\n4. Fund compute ledger separately:`);
-        console.log(`     node scripts/0g-test/fund-compute-mainnet.cjs   # 5 0G to broker\n`);
+        console.log(`     CONFIRM_MAINNET=yes-fund node scripts/0g-test/fund-compute-mainnet.cjs`);
+        if (tokenId === null) {
+            console.log(`\n5. Open ${isMainnet ? 'production' : 'local'} site → /bots/create to mint your seed bot.\n`);
+        }
     }
 }
 

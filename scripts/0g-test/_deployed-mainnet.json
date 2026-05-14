@@ -1,0 +1,13 @@
+{
+  "network": "zeroGMainnet",
+  "chainId": 16661,
+  "deployedAt": "2026-05-14T09:02:41.358Z",
+  "deployer": "0x7200c2e8e506105a41e2CF21D1D3F9a5d8907d9b",
+  "contracts": {
+    "BotINFT": "0x5298e0d0Fdf8c15538B901De4c0e9b7273957a98",
+    "OxHuman": "0x062f1923Deb717A5d8D3e9Ed0e8C69b3eB63BC5f"
+  },
+  "seedBot": null,
+  "explorerBaseUrl": "https://chainscan.0g.ai",
+  "totalCost0G": "0.020269900035472325"
+}

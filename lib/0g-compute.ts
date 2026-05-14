@@ -42,8 +42,11 @@ export const DEFAULT_TESTNET_CONFIG = {
 
 export const DEFAULT_MAINNET_CONFIG = {
     rpcUrl: 'https://evmrpc.0g.ai',
-    // TODO: confirm mainnet provider once we deploy there
-    providerAddress: '0x0000000000000000000000000000000000000000',
+    // qwen3.6-plus (TEE-attested via dstack). Picked over the VL variant
+    // because the Turing-test flow is text-only — VL is more expensive
+    // without giving us anything we use. Verified against the live mainnet
+    // catalog via scripts/0g-test/discover-mainnet-providers.cjs.
+    providerAddress: '0x992e6396157Dc4f22E74F2231235D7DE62696db5',
 };
 
 // ============ Types ============
